@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+    "rustmani-common",
+    "rustmani-proto",
+    "rustmani-server",
+    "rustmani-agent",
+    # "rustmani-cli",
+]

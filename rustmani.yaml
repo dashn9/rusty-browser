@@ -1,0 +1,27 @@
+server:
+  http_port: 8080
+
+fleet:
+  min_browsers: 2
+  idle_timeout_sec: 300
+
+redis:
+  url: "redis://127.0.0.1:6379"
+  key_prefix: "rustmani:"
+
+ai:
+  provider: "openrouter"
+  api_key: "${OPENROUTER_API_KEY}"
+  model: "anthropic/claude-sonnet-4-20250514"
+  resolution:
+    max_width: 1280
+    quality: 85
+    format: "jpeg"
+
+flux:
+  base_url: "http://127.0.0.1:7227"
+  api_key: "${FLUX_API_KEY}"
+  function_name: "rustmani-agent"
+
+api_keys:
+  - "${RUSTMANI_API_KEY}"

@@ -1,0 +1,27 @@
+[package]
+name = "rustmani-server"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "rustmani"
+path = "src/main.rs"
+
+[dependencies]
+rustmani-common = { path = "../rustmani-common" }
+rustmani-proto = { path = "../rustmani-proto" }
+tokio = { version = "1.50.0", features = ["full"] }
+serde = "1.0.228"
+serde_json = "1.0.149"
+yaml_serde = "0.10.4"
+thiserror = "2.0.18"
+tracing-subscriber = "0.3.23"
+tracing = "0.1.44"
+uuid = "1.23.0"
+reqwest = "0.13.2"
+redis = "1.1.0"
+base64 = "0.22.1"
+image = "0.25.10"
+axum = "0.8.8"
+tonic = { version = "0.14.5" }
+prost = "0.14.3"

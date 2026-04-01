@@ -81,11 +81,20 @@ fn default_format() -> String {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct FluxConfig {
+    /// Accepts both `url` and `base_url` in YAML.
+    #[serde(alias = "base_url")]
     pub url: String,
+    /// Accepts both `token` and `api_key` in YAML.
+    #[serde(alias = "api_key")]
     pub token: String,
     /// Name of the Flux function to invoke. Read from FLUX_FUNCTION_NAME env var.
     #[serde(default = "default_function_name")]
     pub function_name: String,
+    /// Base URL for GitHub Releases used to download the agent .deb.
+    /// e.g. "https://github.com/wraithbytes/rustmani/releases/download"
+    /// Falls back to the default repo URL when absent.
+    #[serde(default)]
+    pub github_release_base_url: Option<String>,
 }
 
 fn default_function_name() -> String {

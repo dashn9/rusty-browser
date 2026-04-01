@@ -2,6 +2,8 @@
 name = "rustmani-server"
 version = "0.1.0"
 edition = "2024"
+description = "Rustmani master server — HTTP API and AI instruct engine for browser automation"
+license = "MIT"
 
 [[bin]]
 name = "rustmani"
@@ -25,3 +27,22 @@ image = "0.25.10"
 axum = "0.8.8"
 tonic = { version = "0.14.5" }
 prost = "0.14.3"
+zip = "2"
+
+[package.metadata.deb]
+name = "rustmani-server"
+priority = "optional"
+section = "net"
+maintainer = "Wraithbytes <ops@wraithbytes.io>"
+copyright = "2025 Wraithbytes"
+extended-description = """
+The master server for the Rustmani browser automation cluster.
+Exposes an HTTP API to manage browser agents and an AI instruct
+engine to drive them via screenshot-based automation.
+"""
+assets = [
+  ["target/release/rustmani", "usr/bin/rustmani", "755"],
+  ["rustmani.yaml", "etc/rustmani/rustmani.yaml", "644"],
+]
+conf-files = ["/etc/rustmani/rustmani.yaml"]
+systemd-units = [{ unit-name = "rustmani" }]

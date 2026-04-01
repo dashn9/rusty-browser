@@ -10,12 +10,16 @@ use tower_http::trace::TraceLayer;
 
 use crate::AppState;
 use handlers::browsers;
+use handlers::initialize;
 
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
         .route("/health", get(|| async { "ok" }));
 
     let protected = Router::new()
+        // ── Agent deployment ──────────────────────────────────────────────
+        .route("/initialize", post(initialize::initialize))
+        // ── Browsers ─────────────────────────────────────────────────────
         .route("/browsers", post(browsers::create_browser))
         .route("/browsers", get(browsers::list_browsers))
         .route("/browsers/{id}", get(browsers::get_browser))
@@ -37,3 +41,4 @@ pub fn router(state: Arc<AppState>) -> Router {
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
+

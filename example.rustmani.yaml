@@ -11,7 +11,7 @@ redis:
 
 ai:
   provider: "openrouter"
-  api_key: "${OPENROUTER_API_KEY}"
+  api_key: "your_openrouter_api_key"
   model: "anthropic/claude-sonnet-4-20250514"
   resolution:
     max_width: 1280
@@ -20,8 +20,8 @@ ai:
 
 flux:
   base_url: "http://127.0.0.1:7227"
-  api_key: "${FLUX_API_KEY}"
+  api_key: "your_flux_api_key"
   function_name: "rustmani-agent"
 
 api_keys:
-  - "${RUSTMANI_API_KEY}"
+  - "your_rustmani_api_key"

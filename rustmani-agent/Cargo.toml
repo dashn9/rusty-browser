@@ -2,6 +2,8 @@
 name = "rustmani-agent"
 version = "0.1.0"
 edition = "2024"
+description = "Rustmani browser agent — a single-browser gRPC node managed by Flux"
+license = "MIT"
 
 [[bin]]
 name = "rustmani-agent"
@@ -10,8 +12,8 @@ path = "src/main.rs"
 [dependencies]
 rustmani-common = { path = "../rustmani-common" }
 rustmani-proto = { path = "../rustmani-proto" }
-rustenium-identity = { path = "D:\\Documents\\m-workspace\\rustenium-identity"}
-rustenium = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium"}
+rustenium-identity = "0.1.0"
+rustenium = "1.1.0"
 tokio = { version = "1.50.0", features = ["full"] }
 serde = "1.0.228"
 serde_json = "1.0.149"
@@ -21,3 +23,19 @@ tracing = "0.1.44"
 uuid = "1.23.0"
 tonic = { version = "0.14.5" }
 prost = "0.14.3"
+
+[package.metadata.deb]
+name = "rustmani-agent"
+priority = "optional"
+section = "net"
+maintainer = "Wraithbytes <ops@wraithbytes.io>"
+copyright = "2025 Wraithbytes"
+extended-description = """
+A lightweight browser agent for the Rustmani automation cluster.
+Each instance owns exactly one browser and exposes a gRPC server
+for the master server to connect to and send commands.
+"""
+assets = [
+  ["target/release/rustmani-agent", "usr/bin/rustmani-agent", "755"],
+]
+systemd-units = [{ unit-name = "rustmani-agent" }]

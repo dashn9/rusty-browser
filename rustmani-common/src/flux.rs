@@ -64,15 +64,31 @@ impl FluxClient {
         Ok(())
     }
 
-    pub async fn deploy_function(&self, name: &str, zip_bytes: Vec<u8>) -> Result<(), RustmaniError> {
+    /// Deploy a `.deb` package to Flux as a multipart form upload.
+    ///
+    /// `filename` becomes the `filename` attribute on the multipart part so
+    /// Flux can identify the package by name.
+    pub async fn deploy_function_multipart(
+        &self,
+        name: &str,
+        filename: &str,
+        zip_bytes: Vec<u8>,
+    ) -> Result<(), RustmaniError> {
+        let part = reqwest::multipart::Part::bytes(zip_bytes)
+            .file_name(filename.to_string())
+            .mime_str("application/zip")
+            .map_err(|e| FluxError::Request(e))?;
+
+        let form = reqwest::multipart::Form::new().part("file", part);
+
         let resp = self.client
             .put(format!("{}/deploy/{name}", self.url))
             .header("X-API-Key", &self.token)
-            .header("Content-Type", "application/zip")
-            .body(zip_bytes)
+            .multipart(form)
             .send()
             .await
             .map_err(FluxError::Request)?;
+
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();

@@ -1,0 +1,95 @@
+name: Build Debian Packages
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-deb:
+    name: Build .deb — ${{ matrix.package }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: rustmani-agent
+            bin: rustmani-agent
+          - package: rustmani-server
+            bin: rustmani
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.package }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.package }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libssl-dev \
+            protobuf-compiler
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build release binary — ${{ matrix.package }}
+        run: cargo build --release --bin ${{ matrix.bin }}
+
+      - name: Package as .deb — ${{ matrix.package }}
+        run: cargo deb --no-build -p ${{ matrix.package }}
+
+      - name: Locate .deb artifact
+        id: find_deb
+        run: |
+          DEB=$(find target/debian -name "${{ matrix.package }}_*.deb" | head -1)
+          echo "path=$DEB" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename $DEB)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.find_deb.outputs.name }}
+          path: ${{ steps.find_deb.outputs.path }}
+          retention-days: 30
+
+  release:
+    name: Attach .deb packages to GitHub Release
+    runs-on: ubuntu-22.04
+    needs: build-deb
+    if: startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all .deb artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: debs
+          merge-multiple: true
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: debs/*.deb

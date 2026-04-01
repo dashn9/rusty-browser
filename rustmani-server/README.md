@@ -66,3 +66,14 @@ min_browsers: 2
 ```sh
 RUSTMANI_CONFIG=rustmani.yaml cargo run --bin rustmani
 ```
+
+## Release & Deployments
+
+Deployments are strictly manual and orchestrated via the GitHub Actions **Release Deploy** workflow. 
+
+To ship a new release:
+1. Update the `version = "X.X.X"` inside `rustmani-server/Cargo.toml` (and other agent/common crates if preferred).
+2. Commit and push the changes.
+3. Trigger the `Release Deploy` action from the **Actions** tab on GitHub using `workflow_dispatch`.
+
+The workflow parses the version straight from `Cargo.toml`. To prevent mistakenly overwriting stable endpoints, the action will **reject and abort** if a GitHub Release for that version already exists. If you *really* need to overwrite a botched release, check the **"force overwrite"** box when triggering the workflow.

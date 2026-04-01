@@ -1,19 +1,55 @@
-name: Build Debian Packages
+name: Release Deploy
 
 on:
-  push:
-    branches: [main]
-    tags:
-      - "v*"
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force overwrite if release already exists'
+        type: boolean
+        required: false
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check-version:
+    name: Check Version & Release
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Version
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' rustmani-server/Cargo.toml | head -1 | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Found version: $VERSION"
+
+      - name: Check Existing Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists."
+            if [ "${{ github.event.inputs.force }}" == "false" ] || [ "${{ github.event.inputs.force }}" == "" ]; then
+              echo "Force is false. Aborting."
+              exit 1
+            else
+              echo "Force is true. Proceeding to update/overwrite."
+            fi
+          else
+            echo "Release v$VERSION does not exist. Proceeding."
+          fi
+
   build-deb:
     name: Build .deb — ${{ matrix.package }}
     runs-on: ubuntu-22.04
+    needs: check-version
     strategy:
       fail-fast: false
       matrix:
@@ -71,13 +107,12 @@ jobs:
         with:
           name: ${{ steps.find_deb.outputs.name }}
           path: ${{ steps.find_deb.outputs.path }}
-          retention-days: 30
+          retention-days: 1
 
   release:
     name: Attach .deb packages to GitHub Release
     runs-on: ubuntu-22.04
-    needs: build-deb
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [check-version, build-deb]
 
     permissions:
       contents: write
@@ -92,4 +127,6 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: v${{ needs.check-version.outputs.version }}
           files: debs/*.deb

@@ -28,14 +28,6 @@ pub enum BrowserAction {
 pub async fn handle(client: &RustmaniClient, action: BrowserAction) -> Result<()> {
     match action {
         BrowserAction::Create { identity } => {
-            let identity_val = if let Some(path) = identity {
-                let content = std::fs::read_to_string(&path)?;
-                Some(serde_json::from_str::<serde_json::Value>(&content)?)
-            } else {
-                None
-            };
-
-            let body = serde_json::json!({ "identity": identity_val });
             let resp: serde_json::Value = client.post("/browsers", &body).await?;
             println!("{}", serde_json::to_string_pretty(&resp)?);
         }

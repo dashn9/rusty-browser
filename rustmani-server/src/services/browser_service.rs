@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use uuid::Uuid;
 
 use rustmani_common::ai::BrowserAction;
 use rustmani_common::error::RustmaniError;
 use rustmani_common::state::BrowserInfo;
 
+use crate::services::instruct_service::AIInstructor;
 use crate::AppState;
 
 pub struct BrowserService {
@@ -187,5 +189,20 @@ impl BrowserService {
             context_id: context_id.to_string(),
             action: Some(action),
         }
+    }
+}
+
+#[async_trait]
+impl AIInstructor for BrowserService {
+    fn state(&self) -> &Arc<AppState> {
+        &self.state
+    }
+
+    async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, RustmaniError> {
+        BrowserService::screenshot(self, browser_id).await
+    }
+
+    async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), RustmaniError> {
+        BrowserService::dispatch(self, browser_id, action).await
     }
 }

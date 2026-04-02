@@ -23,164 +23,144 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check-version:
-    name: Check Version & Release
+  release_agent:
+    name: Release rustmani-agent
     runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - package: rustmani-agent
-            force_input: ${{ github.event.inputs.force_agent }}
-          - package: rustmani-server
-            force_input: ${{ github.event.inputs.force_server }}
+    if: contains(inputs.packages, 'rustmani-agent')
     outputs:
-      version_${{ matrix.package }}: ${{ steps.version.outputs.version }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check if package should be released
-        id: should_release
-        run: |
-          PKG="${{ matrix.package }}"
-          PACKAGES="${{ github.event.inputs.packages }}"
-          if echo "$PACKAGES" | grep -q "$PKG"; then
-            echo "released=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping $PKG"
-            exit 0
-          fi
-
       - name: Read Version
-        if: steps.should_release.outputs.released == 'true'
         id: version
         run: |
-          PKG="${{ matrix.package }}"
-          PKG_DIR="${PKG#rustmani-}"
-          VERSION=$(grep '^version = ' "$PKG_DIR/Cargo.toml" | head -1 | cut -d '"' -f 2)
+          VERSION=$(grep '^version = ' rustmani-agent/Cargo.toml | head -1 | cut -d '"' -f 2)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Found version: $VERSION for $PKG"
 
       - name: Check Existing Release
-        if: steps.should_release.outputs.released == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           if gh release view "v$VERSION" > /dev/null 2>&1; then
             echo "Release v$VERSION already exists."
-            if [ "${{ matrix.force_input }}" == "false" ] || [ "${{ matrix.force_input }}" == "" ]; then
+            if [ "${{ inputs.force_agent }}" == "false" ]; then
               echo "Force is false. Aborting."
               exit 1
-            else
-              echo "Force is true. Proceeding to update/overwrite."
             fi
-          else
-            echo "Release v$VERSION does not exist. Proceeding."
           fi
 
-  build-deb:
-    name: Build .deb — ${{ matrix.package }}
-    runs-on: ubuntu-22.04
-    needs: check-version
-    if: ${{ needs.check-version.outputs['version_' + matrix.package] != '' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - package: rustmani-agent
-            bin: rustmani-agent
-          - package: rustmani-server
-            bin: rustmani
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust (stable)
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo registry & build
+      - name: Cache Cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ matrix.package }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.package }}-
-            ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-cargo-agent-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            pkg-config \
-            libssl-dev \
-            protobuf-compiler
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev protobuf-compiler
 
       - name: Install cargo-deb
         run: cargo install cargo-deb --locked
 
-      - name: Build release binary — ${{ matrix.package }}
-        run: cargo build --release --bin ${{ matrix.bin }}
+      - name: Build
+        run: cargo build --release -p rustmani-agent
 
-      - name: Package as .deb — ${{ matrix.package }}
-        run: cargo deb --no-build -p ${{ matrix.package }}
+      - name: Package
+        run: cargo deb --no-build -p rustmani-agent
 
-      - name: Locate .deb artifact
-        id: find_deb
+      - name: Locate artifact
+        id: artifact
         run: |
-          DEB=$(find target/debian -name "${{ matrix.package }}_*.deb" | head -1)
-          echo "path=$DEB" >> "$GITHUB_OUTPUT"
+          DEB=$(find target/debian -name "rustmani-agent_*.deb" | head -1)
+          echo "path=$DEB"
           echo "name=$(basename $DEB)" >> "$GITHUB_OUTPUT"
-
-      - name: Upload .deb artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.find_deb.outputs.name }}
-          path: ${{ steps.find_deb.outputs.path }}
-          retention-days: 1
-
-  release:
-    name: Attach .deb packages to GitHub Release
-    runs-on: ubuntu-22.04
-    needs: [check-version, build-deb]
-    if: ${{ always() && (needs.build-deb.result == 'success' || needs.build-deb.result == 'skipped') }}
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download all .deb artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: debs
-          merge-multiple: true
-          pattern: '*.deb'
-          if-no-files-found: ignore
-
-      - name: Get version from released packages
-        id: version
-        run: |
-          PACKAGES="${{ github.event.inputs.packages }}"
-          if echo "$PACKAGES" | grep -q "rustmani-server"; then
-            VERSION="${{ needs.check-version.outputs.version_rustmani-server }}"
-          elif echo "$PACKAGES" | grep -q "rustmani-agent"; then
-            VERSION="${{ needs.check-version.outputs.version_rustmani-agent }}"
-          else
-            echo "No packages to release"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
-          files: debs/*.deb
-        if: ${{ github.event.inputs.packages != '' }}
+          files: ${{ steps.artifact.outputs.path }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+
+  release_server:
+    name: Release rustmani-server
+    runs-on: ubuntu-22.04
+    if: contains(inputs.packages, 'rustmani-server')
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Version
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' rustmani-server/Cargo.toml | head -1 | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check Existing Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists."
+            if [ "${{ inputs.force_server }}" == "false" ]; then
+              echo "Force is false. Aborting."
+              exit 1
+            fi
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-server-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev protobuf-compiler
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build
+        run: cargo build --release -p rustmani-server
+
+      - name: Package
+        run: cargo deb --no-build -p rustmani-server
+
+      - name: Locate artifact
+        id: artifact
+        run: |
+          DEB=$(find target/debian -name "rustmani-server_*.deb" | head -1)
+          echo "path=$DEB"
+          echo "name=$(basename $DEB)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          files: ${{ steps.artifact.outputs.path }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false

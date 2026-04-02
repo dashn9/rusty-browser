@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::error::RustmaniError;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RustmaniConfig {
     pub server: ServerConfig,
@@ -102,15 +104,15 @@ fn default_function_name() -> String {
 }
 
 impl RustmaniConfig {
-    pub fn load(path: &str) -> Result<Self, crate::error::RustmaniError> {
+    pub fn load(path: &str) -> Result<Self, RustmaniError> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| crate::error::RustmaniError::Config(format!("Failed to read config: {e}")))?;
+            .map_err(|e| RustmaniError::Config(format!("Failed to read config: {e}")))?;
 
         // Substitute environment variables: ${VAR_NAME}
         let content = substitute_env_vars(&content);
 
         yaml_serde::from_str(&content)
-            .map_err(|e| crate::error::RustmaniError::Config(format!("Failed to parse config: {e}")))
+            .map_err(|e| RustmaniError::Config(format!("Failed to parse config: {e}")))
     }
 }
 

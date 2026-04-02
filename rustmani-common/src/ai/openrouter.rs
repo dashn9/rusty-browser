@@ -79,12 +79,12 @@ impl AIProvider for OpenRouterProvider {
         &self,
         screenshot_base64: String,
         instruction: String,
-    ) -> Box<dyn Future<Output = Result<Vec<BrowserAction>, AIError>>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<BrowserAction>, AIError>> + Send>> {
 
         // Talk about really bad design, eheh, you outdid yourself on this. 
         // Well to the caller, make sure you consume this future immediately before a serious obj mutation occurs
         let provider_clone = self.clone();
-        Box::new(async move {
+        Box::pin(async move {
             let messages =
                 provider_clone.build_messages(screenshot_base64.as_ref(), instruction.as_ref());
 

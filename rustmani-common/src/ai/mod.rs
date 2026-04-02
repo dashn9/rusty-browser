@@ -74,7 +74,7 @@ pub trait AIProvider: Send + Sync {
         &self,
         screenshot_base64: String,
         instruction: String,
-    ) -> Box<dyn Future<Output = Result<Vec<BrowserAction>, AIError>>>;
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<BrowserAction>, AIError>> + Send>>;
 }
 
 pub fn create_provider(config: &AIConfig) -> Box<dyn AIProvider> {

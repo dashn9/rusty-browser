@@ -1,9 +1,11 @@
-use anyhow::Result;
 use rustmani_proto::{BrowserCommand, CommandResult, ScreenshotData, browser_command::Action};
 
 use crate::browser::ManagedBrowser;
+use crate::error::AgentError;
 
-pub async fn execute(browser: &ManagedBrowser, cmd: BrowserCommand) -> Result<CommandResult> {
+pub type Result<T> = std::result::Result<T, AgentError>;
+
+pub async fn execute(browser: &mut ManagedBrowser, cmd: BrowserCommand) -> Result<CommandResult> {
     match cmd.action {
         Some(Action::Navigate(nav)) => {
             browser.navigate(&nav.url, &nav.wait_until).await?;

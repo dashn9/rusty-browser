@@ -1,4 +1,5 @@
 use rustenium_identity::{IdentitySession, preset::random};
+use rustenium::browsers::BidiBrowser;
 use uuid::Uuid;
 
 use crate::error::BrowserManagedError;
@@ -19,10 +20,10 @@ impl ManagedBrowser {
         Ok(Self { id, session })
     }
 
-    pub async fn navigate(&self, url: &str, _wait_until: &str) -> Result<(), BrowserManagedError> {
+    pub async fn navigate(&mut self, url: &str, _wait_until: &str) -> Result<(), BrowserManagedError> {
         tracing::info!("[ManagedBrowser] {} - Navigate to: {}", self.id, url);
-        self.session.navigate(url).await
-            .map_err(|e| BrowserManagedError::Navigate(e.to_string()))
+        self.session.browser_mut().navigate(url).await
+            .map(|_| ()).map_err(|e| BrowserManagedError::Navigate(e.to_string()))
     }
 
     pub async fn screenshot(&self) -> Result<Vec<u8>, BrowserManagedError> {

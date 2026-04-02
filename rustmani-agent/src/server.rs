@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::Result;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
@@ -24,8 +23,8 @@ impl BrowserAgent for BrowserAgentService {
         request: Request<BrowserCommand>,
     ) -> Result<Response<CommandResult>, Status> {
         let cmd = request.into_inner();
-        let browser = self.browser.lock().await;
-        let result = executor::execute(&browser, cmd).await.unwrap_or_else(|e| CommandResult {
+        let mut browser = self.browser.lock().await;
+        let result = executor::execute(&mut *browser, cmd).await.unwrap_or_else(|e| CommandResult {
             success: false,
             error_message: e.to_string(),
             screenshot: None,
@@ -34,7 +33,7 @@ impl BrowserAgent for BrowserAgentService {
     }
 }
 
-pub async fn serve(browser: ManagedBrowser, browser_id: &str) -> Result<()> {
+pub async fn serve(browser: ManagedBrowser, browser_id: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let cert = std::fs::read_to_string("tls/agent.crt")?;
     let key = std::fs::read_to_string("tls/agent.key")?;
     let tls = ServerTlsConfig::new().identity(Identity::from_pem(&cert, &key));

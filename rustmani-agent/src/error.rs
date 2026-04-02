@@ -15,6 +15,12 @@ pub enum AgentError {
     Tls(String),
 }
 
+impl From<BrowserManagedError> for AgentError {
+    fn from(e: BrowserManagedError) -> Self {
+        AgentError::Execution(e.to_string())
+    }
+}
+
 /// Errors scoped to managed browser operations (launch, navigate, screenshot, click, etc.)
 #[derive(Debug, Error)]
 pub enum BrowserManagedError {
@@ -41,10 +47,4 @@ pub enum BrowserManagedError {
 
     #[error("Browser close failed: {0}")]
     Close(String),
-}
-
-impl From<BrowserManagedError> for anyhow::Error {
-    fn from(e: BrowserManagedError) -> Self {
-        anyhow::anyhow!("{e}")
-    }
 }

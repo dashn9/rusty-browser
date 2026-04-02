@@ -1,4 +1,3 @@
-use anyhow::Result;
 use tracing::info;
 
 mod browser;
@@ -7,7 +6,7 @@ mod executor;
 mod server;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -22,8 +21,7 @@ async fn main() -> Result<()> {
 
     info!("Starting rustmani-agent {browser_id}");
 
-    let browser = browser::ManagedBrowser::launch(identity_json.as_deref()).await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let browser = browser::ManagedBrowser::launch(identity_json.as_deref()).await?;
     info!("Browser launched");
 
     server::serve(browser, &browser_id).await?;

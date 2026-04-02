@@ -18,11 +18,12 @@ tokio = { version = "1.50.0", features = ["full"] }
 serde = "1.0.228"
 serde_json = "1.0.149"
 thiserror = "2.0.18"
-tracing-subscriber = "0.3.23"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tracing = "0.1.44"
-uuid = "1.23.0"
-tonic = { version = "0.14.5" }
+uuid = { version = "1.23.0", features = ["v4"] }
+tonic = { version = "0.14.5", features = ["tls-ring"]}
 prost = "0.14.3"
+tokio-stream = "0.1.18"
 
 [package.metadata.deb]
 name = "rustmani-agent"

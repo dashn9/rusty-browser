@@ -27,6 +27,8 @@ jobs:
     name: Release rustmani-agent
     runs-on: ubuntu-22.04
     if: contains(inputs.packages, 'rustmani-agent')
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -98,6 +100,8 @@ jobs:
     name: Release rustmani-server
     runs-on: ubuntu-22.04
     if: contains(inputs.packages, 'rustmani-server')
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:

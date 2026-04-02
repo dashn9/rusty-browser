@@ -1,11 +1,18 @@
 use std::sync::Arc;
 
-use axum::extract::State;
-use axum::http::{Request, StatusCode};
-use axum::middleware::Next;
-use axum::response::Response;
+use axum::{
+    extract::State,
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::Response,
+};
 
 use crate::AppState;
+
+pub async fn request_logger(request: Request<axum::body::Body>, next: Next) -> Response {
+    tracing::info!("{} {}", request.method(), request.uri());
+    next.run(request).await
+}
 
 pub async fn api_key_auth(
     State(state): State<Arc<AppState>>,

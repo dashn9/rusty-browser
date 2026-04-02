@@ -1,25 +1,21 @@
+pub mod error;
 pub mod handlers;
 pub mod middleware;
 
 use std::sync::Arc;
 
-use axum::routing::{delete, get, post, put};
-use axum::Router;
-use tower_http::cors::CorsLayer;
-use tower_http::trace::TraceLayer;
+use axum::{routing::{delete, get, post, put}, Router};
 
 use crate::AppState;
-use handlers::browsers;
-use handlers::initialize;
+use handlers::{browsers, initialize};
 
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
-        .route("/health", get(|| async { "ok" }));
+        .route("/health", get(|| async { "ok" }))
+        .layer(axum::middleware::from_fn(middleware::request_logger));
 
     let protected = Router::new()
-        // ── Agent deployment ──────────────────────────────────────────────
         .route("/initialize/", post(initialize::initialize))
-        // ── Browsers ─────────────────────────────────────────────────────
         .route("/browsers/", put(browsers::create_browser))
         .route("/browsers/", get(browsers::list_browsers))
         .route("/browsers/{id}/", get(browsers::get_browser))
@@ -32,13 +28,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/browsers/{id}/screenshot/", post(browsers::screenshot))
         .route("/browsers/{id}/eval/", post(browsers::eval_js))
         .route("/browsers/{id}/instruct/", post(browsers::instruct))
-        .layer(axum::middleware::from_fn_with_state(state.clone(), middleware::api_key_auth));
+        .layer(axum::middleware::from_fn(middleware::request_logger))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::api_key_auth,
+        ));
 
     Router::new()
         .merge(public)
         .merge(protected)
-        .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(axum::middleware::from_fn(middleware::request_logger))
         .with_state(state)
 }
-

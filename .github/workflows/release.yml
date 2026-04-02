@@ -138,13 +138,15 @@ jobs:
         run: cargo build --release -p rustmani-server
 
       - name: Package
-        run: cargo deb --no-build -p rustmani-server
+        run: |
+          cargo deb --no-build -p rustmani-server
+          mv target/debian/rustmani-server_*_amd64.deb target/debian/rustmani-server_amd64.deb
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: target/debian/rustmani-server_*.deb
+          files: target/debian/rustmani-server_amd64.deb
           draft: false
           prerelease: false
           generate_release_notes: false

@@ -35,10 +35,11 @@ futures = "0.3"
 
 [package.metadata.deb]
 name = "rustmani-server"
+revision = "0"
 priority = "optional"
 section = "net"
-maintainer = "Wraithbytes <ops@wraithbytes.io>"
-copyright = "2025 Wraithbytes"
+maintainer = "Daniel Shogbon <ishogbon@gmail.com>"
+copyright = "@2025"
 extended-description = """
 The master server for the Rustmani browser automation cluster.
 """

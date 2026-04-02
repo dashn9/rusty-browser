@@ -30,8 +30,8 @@ name = "rustmani-agent"
 revision = "0"
 priority = "optional"
 section = "net"
-maintainer = "Wraithbytes <ops@wraithbytes.io>"
-copyright = "2025 Wraithbytes"
+maintainer = "Daniel Shogbon <ishogbon@gmail.com>"
+copyright = "@2025"
 extended-description = """
 A lightweight browser agent for the Rustmani automation cluster.
 Each instance owns exactly one browser and exposes a gRPC server

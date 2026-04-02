@@ -93,7 +93,7 @@ pub struct FluxConfig {
     #[serde(default = "default_function_name")]
     pub function_name: String,
     /// Base URL for GitHub Releases used to download the agent .deb.
-    /// e.g. "https://github.com/wraithbytes/rustmani/releases/download"
+    /// e.g. "https://github.com/dashn9/rustmani/releases/download"
     /// Falls back to the default repo URL when absent.
     #[serde(default)]
     pub github_release_base_url: Option<String>,

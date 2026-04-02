@@ -56,7 +56,7 @@ impl InitializeService {
             .flux
             .github_release_base_url
             .as_deref()
-            .unwrap_or("https://github.com/wraithbytes/rustmani/releases/download");
+            .unwrap_or("https://github.com/dashn9/rustmani/releases/download");
 
         let url = format!("{base}/v{version}/{filename}");
         info!("GET {url}");
@@ -90,9 +90,9 @@ fn build_function_yaml(name: &str) -> String {
          handler: {name}\n\
          resources:\n\
            cpu: 1\n\
-           memory: 2548\n\
+           memory: 2048\n\
          timeout: 30\n\
-         max_concurrency: 100\n\
+         max_concurrency: 200\n\
          max_concurrency_behaviour: wait\n\
          resource_pressure_behavior: wait\n\
          env:\n"

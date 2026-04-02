@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use axum::{
     extract::State,
-    http::{Request, StatusCode},
+    http::Request,
     middleware::Next,
     response::Response,
 };
 
+use crate::http::error::AppError;
 use crate::AppState;
 
 pub async fn request_logger(request: Request<axum::body::Body>, next: Next) -> Response {
@@ -18,7 +19,7 @@ pub async fn api_key_auth(
     State(state): State<Arc<AppState>>,
     request: Request<axum::body::Body>,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     let api_key = request
         .headers()
         .get("X-API-Key")
@@ -30,6 +31,6 @@ pub async fn api_key_auth(
         Some(key) if state.config.api_keys.contains(&key.to_string()) => {
             Ok(next.run(request).await)
         }
-        _ => Err(StatusCode::UNAUTHORIZED),
+        _ => Err(AppError::Unauthorized),
     }
 }

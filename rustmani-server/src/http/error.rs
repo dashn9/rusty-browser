@@ -27,37 +27,39 @@ pub enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, code, message) = match &self {
+        let (status, code, message) = match self {
             AppError::Flux(e) => {
                 let msg = e.to_string();
-                (StatusCode::BAD_GATEWAY, "FLUX_ERROR", msg)
+                tracing::error!("Flux error: {msg}");
+                (StatusCode::BAD_GATEWAY, "FLUX_ERROR".to_string(), msg)
             }
             AppError::Internal(msg) => {
                 tracing::error!("Internal error: {msg}");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "INTERNAL_ERROR",
-                    msg.clone(),
+                    "INTERNAL_ERROR".to_string(),
+                    msg,
                 )
             }
             AppError::NotFound(id) => {
                 let msg = format!("Resource not found: {id}");
-                (StatusCode::NOT_FOUND, "NOT_FOUND", msg)
+                (StatusCode::NOT_FOUND, "NOT_FOUND".to_string(), msg)
             }
             AppError::Unauthorized => (
                 StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
+                "UNAUTHORIZED".to_string(),
                 "Unauthorized".to_string(),
             ),
         };
 
         let body = ErrorResponse {
             error: ErrorDetail {
-                code: code.to_string(),
-                message,
+                code: code.clone(),
+                message: message.clone(),
             },
         };
 
+        tracing::info!("Returning error: code={}, message={}", code, message);
         (status, Json(body)).into_response()
     }
 }

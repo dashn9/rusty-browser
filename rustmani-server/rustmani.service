@@ -1,6 +1,5 @@
 [Unit]
 Description=Rustmani Server - Browser automation master
-After=network.target redis.service
 
 [Service]
 Type=simple

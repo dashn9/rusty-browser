@@ -6,11 +6,6 @@ use rustmani_common::error::RustmaniError;
 
 use crate::AppState;
 
-/// Orchestrates the full cluster bootstrap sequence:
-///   1. Initialize the Flux runtime.
-///   2. Register or update the function definition.
-///   3. Download the matching agent `.deb`.
-///   4. Upload the `.deb` to Flux (multipart).
 pub struct InitializeService {
     state: Arc<AppState>,
 }
@@ -24,29 +19,24 @@ impl InitializeService {
         let function_name = self.state.config.flux.function_name.clone();
         let flux = &self.state.flux;
 
-        // ── 1. Initialize Flux ─────────────────────────────────────────────
         info!("Initializing Flux runtime…");
         flux.initialize().await?;
         info!("Flux initialized");
 
-        // ── 2. Register function definition ───────────────────────────────
         info!("Registering function '{function_name}'…");
         let function_yaml = build_function_yaml(&function_name);
         flux.register_function(&function_yaml).await?;
         info!("Function '{function_name}' registered");
 
-        // ── 3. Download agent .deb ─────────────────────────────────────────
-        let version = env!("CARGO_PKG_VERSION");
+        let version = "0.1.0";
         let filename = format!("rustmani-agent_{version}_amd64.deb");
         info!("Downloading {filename}…");
         let deb_bytes = self.download_agent_deb(version, &filename).await?;
         info!("Downloaded {} byte(s)", deb_bytes.len());
 
-        // ── 4. Zip the .deb ───────────────────────────────────────────────
         info!("Zipping {filename}…");
         let zip_bytes = create_zip(&filename, &deb_bytes)?;
 
-        // ── 5. Deploy zip to Flux (multipart) ────────────────────────────
         info!("Uploading '{filename}.zip' to Flux as function '{function_name}'…");
         flux.deploy_function_multipart(&function_name, &format!("{filename}.zip"), zip_bytes)
             .await?;

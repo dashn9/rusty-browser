@@ -80,18 +80,11 @@ jobs:
       - name: Package
         run: cargo deb --no-build -p rustmani-agent
 
-      - name: Locate artifact
-        id: artifact
-        run: |
-          DEB=$(find target/debian -name "rustmani-agent_*.deb" | head -1)
-          echo "path=$DEB"
-          echo "name=$(basename $DEB)" >> "$GITHUB_OUTPUT"
-
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: ${{ steps.artifact.outputs.path }}
+          files: target/debian/rustmani-agent_*.deb
           draft: false
           prerelease: false
           generate_release_notes: false
@@ -153,18 +146,11 @@ jobs:
       - name: Package
         run: cargo deb --no-build -p rustmani-server
 
-      - name: Locate artifact
-        id: artifact
-        run: |
-          DEB=$(find target/debian -name "rustmani-server_*.deb" | head -1)
-          echo "path=$DEB"
-          echo "name=$(basename $DEB)" >> "$GITHUB_OUTPUT"
-
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: ${{ steps.artifact.outputs.path }}
+          files: target/debian/rustmani-server_*.deb
           draft: false
           prerelease: false
           generate_release_notes: false

@@ -27,6 +27,7 @@ tokio-stream = "0.1.18"
 
 [package.metadata.deb]
 name = "rustmani-agent"
+revision = "0"
 priority = "optional"
 section = "net"
 maintainer = "Wraithbytes <ops@wraithbytes.io>"

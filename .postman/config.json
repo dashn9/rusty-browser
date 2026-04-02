@@ -1,0 +1,15 @@
+{
+  "workspace": {
+    "id": "91c978cb-5ca4-4735-8e76-393977eeb050"
+  },
+  "entities": {
+    "environments": [],
+    "flows": [],
+    "globals": [],
+    "mocks": [],
+    "specs": [
+      "..\\rustmani-proto\\proto\\rustmani.proto"
+    ],
+    "collections": []
+  }
+}

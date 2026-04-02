@@ -1,0 +1,15 @@
+[Unit]
+Description=Rustmani Server - Browser automation master
+After=network.target redis.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rustmani
+Environment=RUSTMANI_CONFIG=/etc/rustmani/rustmani.yaml
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

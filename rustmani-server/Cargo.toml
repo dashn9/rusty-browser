@@ -41,12 +41,11 @@ maintainer = "Wraithbytes <ops@wraithbytes.io>"
 copyright = "2025 Wraithbytes"
 extended-description = """
 The master server for the Rustmani browser automation cluster.
-Exposes an HTTP API to manage browser agents and an AI instruct
-engine to drive them via screenshot-based automation.
 """
 assets = [
   ["target/release/rustmani", "usr/bin/rustmani", "755"],
-  ["rustmani.yaml", "etc/rustmani/rustmani.yaml", "644"],
+  ["example.rustmani.yaml", "etc/rustmani/rustmani.yaml", "644"],
+  ["rustmani.service", "lib/systemd/system/rustmani.service", "644"],
 ]
 conf-files = ["/etc/rustmani/rustmani.yaml"]
-systemd-units = [{ unit-name = "rustmani" }]
+systemd-units = [{ unit-name = "rustmani.service" }]

@@ -1,10 +1,31 @@
 use std::sync::Arc;
 
+use serde::Serialize;
 use tracing::info;
 
 use rustmani_common::error::RustmaniError;
 
 use crate::AppState;
+
+#[derive(Serialize)]
+struct Resources {
+    cpu: u32,
+    memory: u32,
+}
+
+#[derive(Serialize)]
+struct FunctionSpec {
+    name: String,
+    handler: String,
+    resources: Resources,
+    timeout: u32,
+    max_concurrency: u32,
+    #[serde(rename = "max_concurrency_behaviour")]
+    max_concurrency_behaviour: String,
+    #[serde(rename = "resource_pressure_behavior")]
+    resource_pressure_behavior: String,
+    env: serde_yaml::Value,
+}
 
 pub struct InitializeService {
     state: Arc<AppState>,
@@ -24,18 +45,18 @@ impl InitializeService {
         info!("Flux initialized");
 
         info!("Registering function '{function_name}'…");
-        let function_yaml = build_function_yaml(&function_name);
+        let function_yaml = build_function_yaml(&function_name)?;
         flux.register_function(&function_yaml).await?;
         info!("Function '{function_name}' registered");
 
         let version = "0.1.0";
-        let filename = format!("rustmani-agent_{version}_amd64.deb");
+        let filename = "rustmani-agent";
         info!("Downloading {filename}…");
-        let deb_bytes = self.download_agent_deb(version, &filename).await?;
-        info!("Downloaded {} byte(s)", deb_bytes.len());
+        let agent_bytes = self.download_agent(version, filename).await?;
+        info!("Downloaded {} byte(s)", agent_bytes.len());
 
         info!("Zipping {filename}…");
-        let zip_bytes = create_zip(&filename, &deb_bytes)?;
+        let zip_bytes = create_zip(filename, &agent_bytes)?;
 
         info!("Uploading '{filename}.zip' to Flux as function '{function_name}'…");
         flux.deploy_function_multipart(&function_name, &format!("{filename}.zip"), zip_bytes)
@@ -45,7 +66,7 @@ impl InitializeService {
         Ok(())
     }
 
-    async fn download_agent_deb(
+    async fn download_agent(
         &self,
         version: &str,
         filename: &str,
@@ -83,20 +104,23 @@ impl InitializeService {
     }
 }
 
-/// Build the YAML function definition sent to Flux's `PUT /functions` endpoint.
-fn build_function_yaml(name: &str) -> String {
-    format!(
-        "name: {name}\n\
-         handler: {name}\n\
-         resources:\n\
-           cpu: 1\n\
-           memory: 2048\n\
-         timeout: 30\n\
-         max_concurrency: 200\n\
-         max_concurrency_behaviour: wait\n\
-         resource_pressure_behavior: wait\n\
-         env:\n"
-    )
+fn build_function_yaml(name: &str) -> Result<String, RustmaniError> {
+    let spec = FunctionSpec {
+        name: name.to_string(),
+        handler: name.to_string(),
+        resources: Resources {
+            cpu: 1,
+            memory: 2048,
+        },
+        timeout: 30,
+        max_concurrency: 200,
+        max_concurrency_behaviour: "wait".to_string(),
+        resource_pressure_behavior: "wait".to_string(),
+        env: serde_yaml::Value::Null,
+    };
+
+    serde_yaml::to_string(&spec)
+        .map_err(|e| RustmaniError::Internal(format!("YAML serialization failed: {e}")))
 }
 
 fn create_zip(filename: &str, data: &[u8]) -> Result<Vec<u8>, RustmaniError> {
@@ -106,7 +130,7 @@ fn create_zip(filename: &str, data: &[u8]) -> Result<Vec<u8>, RustmaniError> {
 
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+        .unix_permissions(0o755);
 
     zip.start_file(filename, options)
         .map_err(|e| RustmaniError::Internal(format!("zip start_file: {}", e)))?;

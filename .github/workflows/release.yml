@@ -71,20 +71,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends pkg-config libssl-dev protobuf-compiler
 
-      - name: Install cargo-deb
-        run: cargo install cargo-deb --locked
-
       - name: Build
         run: cargo build --release -p rustmani-agent
-
-      - name: Package
-        run: cargo deb --no-build -p rustmani-agent
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: target/debian/rustmani-agent_*.deb
+          files: target/release/rustmani-agent
           draft: false
           prerelease: false
           generate_release_notes: false

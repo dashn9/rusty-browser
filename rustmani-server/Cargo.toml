@@ -30,6 +30,7 @@ prost = "0.14.3"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 anyhow = "1.0"
 async-trait = "0.1"
+serde_yaml = "0.9"
 zip = "2"
 futures = "0.3"
 

@@ -11,8 +11,7 @@ use handlers::{browsers, initialize};
 
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
-        .route("/health", get(|| async { "ok" }))
-        .layer(axum::middleware::from_fn(middleware::request_logger));
+        .route("/health", get(|| async { "ok" }));
 
     let protected = Router::new()
         .route("/initialize/", post(initialize::initialize))
@@ -28,7 +27,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/browsers/{id}/screenshot/", post(browsers::screenshot))
         .route("/browsers/{id}/eval/", post(browsers::eval_js))
         .route("/browsers/{id}/instruct/", post(browsers::instruct))
-        .layer(axum::middleware::from_fn(middleware::request_logger))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::api_key_auth,

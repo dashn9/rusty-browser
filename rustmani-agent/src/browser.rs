@@ -89,10 +89,13 @@ impl ManagedBrowser {
         let list = ProxyList::load(exe_dir.join("agent-proxies.yaml").to_str()?)?;
         let mut rng = rand::thread_rng();
         let by_geo = list.get_proxies_for_geo(Some(geo.as_str()));
-        if !by_geo.is_empty() {
-            return by_geo.choose(&mut rng).cloned();
-        }
-        list.get_all().choose(&mut rng).map(|s| s.to_string())
+        let proxy = if !by_geo.is_empty() {
+            by_geo.choose(&mut rng).cloned()
+        } else {
+            list.get_all().choose(&mut rng).map(|s| s.to_string())
+        };
+        tracing::info!("[ManagedBrowser] proxy selected: {:?} (geo={})", proxy, geo.as_str());
+        proxy
     }
 
     pub async fn navigate(&mut self, url: &str, _wait_until: &str) -> Result<(), BrowserManagedError> {

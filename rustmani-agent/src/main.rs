@@ -1,9 +1,16 @@
+use clap::Parser;
 use tracing::info;
 
 mod browser;
 mod error;
 mod executor;
 mod server;
+
+#[derive(Parser)]
+struct Args {
+    #[arg(long)]
+    browser_id: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,15 +21,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let browser_id =
-        std::env::var("RUSTMANI_BROWSER_ID").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+    let args = Args::parse();
+    let browser_id = args.browser_id;
 
     let browser_config = browser::ChromeBrowserLaunchConfig::from_env().unwrap_or_default();
 
     info!("Starting rustmani-agent {browser_id}");
 
     let browser = browser::ManagedBrowser::launch(browser_config).await?;
-    info!("Browser launched");
 
     server::serve(browser, &browser_id).await?;
 

@@ -99,11 +99,13 @@ impl FluxClient {
 
     /// Spawns a browser agent via Flux. Returns BrowserInfo (browser_id, host, grpc_port)
     /// parsed from the function's stdout output.
-    pub async fn execute_function(&self, name: &str, args: &[String]) -> Result<BrowserInfo, FluxError> {
+    pub async fn execute_function(&self, name: &str, browser_id: &str, args: &[String]) -> Result<BrowserInfo, FluxError> {
+        let mut full_args = vec!["--browser-id".to_string(), browser_id.to_string()];
+        full_args.extend_from_slice(args);
         let resp = self.client
             .post(format!("{}/execute/{name}", self.url))
             .header("X-API-Key", &self.token)
-            .json(&serde_json::json!({ "args": args }))
+            .json(&serde_json::json!({ "args": full_args }))
             .send()
             .await?;
 

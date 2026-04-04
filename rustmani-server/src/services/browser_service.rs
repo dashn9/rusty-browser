@@ -25,8 +25,9 @@ impl BrowserService {
     }
 
     pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<BrowserInfo, RustmaniError> {
+        let browser_id = Uuid::new_v4().to_string();
         let args: Vec<String> = identity.into_iter().map(|id| id.to_string()).collect();
-        let browser = self.state.flux.execute_function(&self.state.config.flux.function_name, &args).await?;
+        let browser = self.state.flux.execute_function(&self.state.config.flux.function_name, &browser_id, &args).await?;
         self.state.redis.add_browser(&browser).await?;
         Ok(browser)
     }

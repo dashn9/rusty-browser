@@ -8,7 +8,7 @@ use rustmani_common::error::RustmaniError;
 use crate::AppState;
 
 const BROWSER_CONFIG_ENV_VAR: &str = "RUSTMANI_BROWSER_CONFIG";
-const PROXIES_FILENAME: &str = "agent-proxies";
+const PROXIES_FILENAME: &str = "agent-proxies.yaml";
 
 #[derive(Serialize)]
 struct Resources {
@@ -49,7 +49,7 @@ impl InitializeService {
 
         info!("Registering function '{function_name}'…");
         let browser_config_json = self.get_browser_config_json();
-        let function_yaml = build_function_yaml(&function_name, &browser_config_json)?;
+        let function_yaml = build_function_yaml(&function_name, &browser_config_json, &self.state.config.agent_env)?;
         flux.register_function(&function_yaml).await?;
         info!("Function '{function_name}' registered");
 
@@ -119,13 +119,24 @@ impl InitializeService {
     }
 }
 
-fn build_function_yaml(name: &str, browser_config_json: &Option<String>) -> Result<String, RustmaniError> {
+fn build_function_yaml(
+    name: &str,
+    browser_config_json: &Option<String>,
+    agent_env: &std::collections::HashMap<String, String>,
+) -> Result<String, RustmaniError> {
     let mut env_vars = serde_yaml::Mapping::new();
-    
+
     if let Some(config) = browser_config_json {
         env_vars.insert(
             serde_yaml::Value::String(BROWSER_CONFIG_ENV_VAR.to_string()),
             serde_yaml::Value::String(config.clone()),
+        );
+    }
+
+    for (k, v) in agent_env {
+        env_vars.insert(
+            serde_yaml::Value::String(k.clone()),
+            serde_yaml::Value::String(v.clone()),
         );
     }
 

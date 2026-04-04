@@ -14,6 +14,9 @@ pub struct RustmaniConfig {
     /// Path to the agent-proxies.yaml file to bundle into the agent deployment.
     #[serde(default)]
     pub proxy_file: Option<String>,
+    /// Extra environment variables injected into the agent function spec.
+    #[serde(default)]
+    pub agent_env: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

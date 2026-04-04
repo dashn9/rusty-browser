@@ -7,6 +7,9 @@ use rustmani_common::error::RustmaniError;
 
 use crate::AppState;
 
+const BROWSER_CONFIG_ENV_VAR: &str = "RUSTMANI_BROWSER_CONFIG";
+const PROXIES_FILENAME: &str = "agent-proxies";
+
 #[derive(Serialize)]
 struct Resources {
     cpu: u32,
@@ -45,7 +48,8 @@ impl InitializeService {
         info!("Flux initialized");
 
         info!("Registering function '{function_name}'…");
-        let function_yaml = build_function_yaml(&function_name)?;
+        let browser_config_json = self.get_browser_config_json();
+        let function_yaml = build_function_yaml(&function_name, &browser_config_json)?;
         flux.register_function(&function_yaml).await?;
         info!("Function '{function_name}' registered");
 
@@ -56,7 +60,8 @@ impl InitializeService {
         info!("Downloaded {} byte(s)", agent_bytes.len());
 
         info!("Zipping {filename}…");
-        let zip_bytes = create_zip(filename, &agent_bytes)?;
+        let proxies_yaml = self.get_proxies_yaml();
+        let zip_bytes = create_zip_with_proxies(filename, &agent_bytes, proxies_yaml)?;
 
         info!("Uploading '{filename}.zip' to Flux as function '{function_name}'…");
         flux.deploy_function_multipart(&function_name, &format!("{filename}.zip"), zip_bytes)
@@ -64,6 +69,16 @@ impl InitializeService {
         info!("Agent '{function_name}' v{version} deployed");
 
         Ok(())
+    }
+
+    fn get_proxies_yaml(&self) -> Option<String> {
+        let path = self.state.config.proxy_file.as_deref()?;
+        std::fs::read_to_string(path).ok()
+    }
+
+    fn get_browser_config_json(&self) -> Option<String> {
+        let chrome_config = self.state.config.browser.chrome_config.as_ref()?;
+        serde_json::to_string(chrome_config).ok()
     }
 
     async fn download_agent(
@@ -104,7 +119,16 @@ impl InitializeService {
     }
 }
 
-fn build_function_yaml(name: &str) -> Result<String, RustmaniError> {
+fn build_function_yaml(name: &str, browser_config_json: &Option<String>) -> Result<String, RustmaniError> {
+    let mut env_vars = serde_yaml::Mapping::new();
+    
+    if let Some(config) = browser_config_json {
+        env_vars.insert(
+            serde_yaml::Value::String(BROWSER_CONFIG_ENV_VAR.to_string()),
+            serde_yaml::Value::String(config.clone()),
+        );
+    }
+
     let spec = FunctionSpec {
         name: name.to_string(),
         handler: name.to_string(),
@@ -116,14 +140,18 @@ fn build_function_yaml(name: &str) -> Result<String, RustmaniError> {
         max_concurrency: 200,
         max_concurrency_behaviour: "wait".to_string(),
         resource_pressure_behavior: "wait".to_string(),
-        env: serde_yaml::Value::Null,
+        env: serde_yaml::Value::Mapping(env_vars),
     };
 
     serde_yaml::to_string(&spec)
         .map_err(|e| RustmaniError::Internal(format!("YAML serialization failed: {e}")))
 }
 
-fn create_zip(filename: &str, data: &[u8]) -> Result<Vec<u8>, RustmaniError> {
+fn create_zip_with_proxies(
+    filename: &str,
+    agent_data: &[u8],
+    proxies_yaml: Option<String>,
+) -> Result<Vec<u8>, RustmaniError> {
     use std::io::{Cursor, Write};
     let cursor = Cursor::new(Vec::new());
     let mut zip = zip::ZipWriter::new(cursor);
@@ -135,8 +163,20 @@ fn create_zip(filename: &str, data: &[u8]) -> Result<Vec<u8>, RustmaniError> {
     zip.start_file(filename, options)
         .map_err(|e| RustmaniError::Internal(format!("zip start_file: {}", e)))?;
 
-    zip.write_all(data)
+    zip.write_all(agent_data)
         .map_err(|e| RustmaniError::Internal(format!("zip write_all: {}", e)))?;
+
+    if let Some(proxies) = proxies_yaml {
+        let file_options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o644);
+
+        zip.start_file(PROXIES_FILENAME, file_options)
+            .map_err(|e| RustmaniError::Internal(format!("zip start_file proxies: {}", e)))?;
+
+        zip.write_all(proxies.as_bytes())
+            .map_err(|e| RustmaniError::Internal(format!("zip write_all proxies: {}", e)))?;
+    }
 
     zip.finish()
         .map(|c| c.into_inner())

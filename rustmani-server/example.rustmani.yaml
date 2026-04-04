@@ -23,5 +23,16 @@ flux:
   api_key: "your_flux_api_key"
   function_name: "rustmani-agent"
 
-api_keys:
-  - "your_rustmani_api_key"
+browser:
+  chrome_config:
+    driver_executable_path: "/usr/bin/chromedriver"
+    host: "localhost"
+    port: 9515
+    driver_flags: []
+    sandbox: false
+    chrome_executable_path: "/usr/bin/google-chrome"
+    user_data_dir: null
+    browser_flags:
+      - "--disable-blink-features=AutomationControlled"
+      - "--disable-dev-shm-usage"
+      - "--no-sandbox"

@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 rustmani-common = { path = "../rustmani-common" }
 rustmani-proto = { path = "../rustmani-proto" }
-rustenium-identity = "0.1.0"
+rustenium-identity = "0.1.2"
 rustenium = "1.1.0"
 tokio = { version = "1.50.0", features = ["full"] }
 serde = "1.0.228"
@@ -24,6 +24,7 @@ uuid = { version = "1.23.0", features = ["v4"] }
 tonic = { version = "0.14.5", features = ["tls-ring"]}
 prost = "0.14.3"
 tokio-stream = "0.1.18"
+rand = "0.8"
 
 [package.metadata.deb]
 name = "rustmani-agent"

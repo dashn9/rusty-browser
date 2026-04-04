@@ -53,13 +53,8 @@ impl IntoResponse for AppError {
         };
 
         let body = ErrorResponse {
-            error: ErrorDetail {
-                code: code.clone(),
-                message: message.clone(),
-            },
+            error: ErrorDetail { code, message },
         };
-
-        tracing::info!("Returning error: code={}, message={}", code, message);
         (status, Json(body)).into_response()
     }
 }

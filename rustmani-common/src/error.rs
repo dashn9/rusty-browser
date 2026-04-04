@@ -40,26 +40,17 @@ pub enum FluxError {
     Request(#[from] reqwest::Error),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AIError {
+    #[error("request failed: {0}")]
     RequestFailed(String),
+    #[error("invalid response: {0}")]
     InvalidResponse(String),
+    #[error("unauthorized")]
     Unauthorized,
+    #[error("rate limited")]
     RateLimited,
 }
-
-impl std::fmt::Display for AIError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AIError::RequestFailed(msg) => write!(f, "request failed: {}", msg),
-            AIError::InvalidResponse(msg) => write!(f, "invalid response: {}", msg),
-            AIError::Unauthorized => write!(f, "unauthorized"),
-            AIError::RateLimited => write!(f, "rate limited"),
-        }
-    }
-}
-
-impl std::error::Error for AIError {}
 
 #[derive(Debug, Error)]
 pub enum RustmaniError {

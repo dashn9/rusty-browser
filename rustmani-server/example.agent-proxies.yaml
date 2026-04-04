@@ -1,0 +1,19 @@
+US:
+  proxies:
+    - "http://user:pass@p.webshare.io:80"
+    - "http://user:pass@p.webshare.io:80"
+    - "http://user:pass@p.webshare.io:80"
+    - "http://user:pass@p.webshare.io:80"
+    - "http://user:pass@p.webshare.io:80"
+    - "http://user:pass@p.webshare.io:80"
+UK:
+  proxies:
+    - "http://user:pass@p.webshare.io:80"
+    - "http://user0:pass@p.webshare.io:80"
+    - "http://user1:pass@p.webshare.io:80"
+JP:
+  proxies:
+    - "http://user:pass@p.webshare.io:80"
+DE:
+  proxies:
+    - "http://user:pass@p.webshare.io:80"

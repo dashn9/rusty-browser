@@ -14,14 +14,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let browser_id = std::env::var("RUSTMANI_BROWSER_ID")
-        .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+    let browser_id =
+        std::env::var("RUSTMANI_BROWSER_ID").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
 
-    let identity_json = std::env::var("RUSTMANI_IDENTITY_JSON").ok();
+    let browser_config = browser::ChromeBrowserLaunchConfig::from_env().unwrap_or_default();
 
     info!("Starting rustmani-agent {browser_id}");
 
-    let browser = browser::ManagedBrowser::launch(identity_json.as_deref()).await?;
+    let browser = browser::ManagedBrowser::launch(browser_config).await?;
     info!("Browser launched");
 
     server::serve(browser, &browser_id).await?;

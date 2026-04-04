@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::RustmaniError;
 
@@ -9,6 +9,17 @@ pub struct RustmaniConfig {
     pub ai: AIConfig,
     pub flux: FluxConfig,
     pub api_keys: Vec<String>,
+    #[serde(default)]
+    pub browser: BrowserConfig,
+    /// Path to the agent-proxies.yaml file to bundle into the agent deployment.
+    #[serde(default)]
+    pub proxy_file: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BrowserConfig {
+    #[serde(default)]
+    pub chrome_config: Option<ChromeBrowserConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -30,6 +41,26 @@ pub struct RedisConfig {
 
 fn default_key_prefix() -> String {
     "rustmani:".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct ChromeBrowserConfig {
+    #[serde(default)]
+    pub driver_executable_path: Option<String>,
+    #[serde(default)]
+    pub host: Option<String>,
+    #[serde(default)]
+    pub port: Option<u16>,
+    #[serde(default)]
+    pub driver_flags: Vec<String>,
+    #[serde(default)]
+    pub sandbox: bool,
+    #[serde(default)]
+    pub chrome_executable_path: Option<String>,
+    #[serde(default)]
+    pub user_data_dir: Option<String>,
+    #[serde(default)]
+    pub browser_flags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -83,18 +114,12 @@ fn default_format() -> String {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct FluxConfig {
-    /// Accepts both `url` and `base_url` in YAML.
     #[serde(alias = "base_url")]
     pub url: String,
-    /// Accepts both `token` and `api_key` in YAML.
     #[serde(alias = "api_key")]
     pub token: String,
-    /// Name of the Flux function to invoke. Read from FLUX_FUNCTION_NAME env var.
     #[serde(default = "default_function_name")]
     pub function_name: String,
-    /// Base URL for GitHub Releases used to download the agent .deb.
-    /// e.g. "https://github.com/dashn9/rustmani/releases/download"
-    /// Falls back to the default repo URL when absent.
     #[serde(default)]
     pub github_release_base_url: Option<String>,
 }
@@ -108,7 +133,6 @@ impl RustmaniConfig {
         let content = std::fs::read_to_string(path)
             .map_err(|e| RustmaniError::Config(format!("Failed to read config: {e}")))?;
 
-        // Substitute environment variables: ${VAR_NAME}
         let content = substitute_env_vars(&content);
 
         yaml_serde::from_str(&content)
@@ -122,10 +146,50 @@ fn substitute_env_vars(input: &str) -> String {
         if let Some(end) = result[start..].find('}') {
             let var_name = &result[start + 2..start + end];
             let value = std::env::var(var_name).unwrap_or_default();
-            result = format!("{}{}{}", &result[..start], value, &result[start + end + 1..]);
+            result = format!(
+                "{}{}{}",
+                &result[..start],
+                value,
+                &result[start + end + 1..]
+            );
         } else {
             break;
         }
     }
     result
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyList(Vec<GeoProxyEntry>);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeoProxyEntry {
+    pub geo: String,
+    #[serde(default)]
+    pub proxies: Vec<String>,
+}
+
+impl ProxyList {
+    pub fn load(path: &str) -> Option<Self> {
+        let content = std::fs::read_to_string(path).ok()?;
+        yaml_serde::from_str(&content).ok()
+    }
+
+    pub fn get_proxies_for_geo(&self, geo: Option<&str>) -> Vec<String> {
+        let target_geo = geo.unwrap_or("").to_uppercase();
+
+        for entry in &self.0 {
+            if entry.geo.to_uppercase() == target_geo {
+                return entry.proxies.clone();
+            }
+        }
+
+        Vec::new()
+    }
+
+    pub fn get_all(&self) -> Vec<&str> {
+        self.0.iter()
+            .flat_map(|e| e.proxies.iter().map(String::as_str))
+            .collect()
+    }
 }

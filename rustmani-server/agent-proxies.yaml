@@ -1,0 +1,19 @@
+US:
+  proxies:
+    - "http://yaqekpcu-1:20p71o0p8kiu@p.webshare.io:80"
+    - "http://yaqekpcu-2:20p71o0p8kiu@p.webshare.io:80"
+    - "http://yaqekpcu-3:20p71o0p8kiu@p.webshare.io:80"
+    - "http://yaqekpcu-5:20p71o0p8kiu@p.webshare.io:80"
+    - "http://yaqekpcu-6:20p71o0p8kiu@p.webshare.io:80"
+    - "http://yaqekpcu-7:20p71o0p8kiu@p.webshare.io:80"
+UK:
+  proxies:
+    - "http://yaqekpcu-4:20p71o0p8kiu@p.webshare.io:80"
+    - "http://yaqekpcu-10:20p71o0p8kiu@p.webshare.io:80"
+    - "http://yaqekpcu-11:20p71o0p8kiu@p.webshare.io:80"
+JP:
+  proxies:
+    - "http://yaqekpcu-8:20p71o0p8kiu@p.webshare.io:80"
+DE:
+  proxies:
+    - "http://yaqekpcu-9:20p71o0p8kiu@p.webshare.io:80"

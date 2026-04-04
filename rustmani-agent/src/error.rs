@@ -1,50 +1,47 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum AgentError {
-    #[error("Browser launch failed: {0}")]
-    BrowserLaunch(String),
-
-    #[error("Command execution failed: {0}")]
-    Execution(String),
-
-    #[error("gRPC server error: {0}")]
-    GrpcServe(String),
-
-    #[error("TLS configuration error: {0}")]
-    Tls(String),
+pub enum TlsError {
+    #[error("cert read failed: {0}")]
+    CertRead(String),
+    #[error("key read failed: {0}")]
+    KeyRead(String),
+    #[error("config failed: {0}")]
+    Config(String),
 }
 
-impl From<BrowserManagedError> for AgentError {
-    fn from(e: BrowserManagedError) -> Self {
-        AgentError::Execution(e.to_string())
-    }
-}
-
-/// Errors scoped to managed browser operations (launch, navigate, screenshot, click, etc.)
 #[derive(Debug, Error)]
-pub enum BrowserManagedError {
-    #[error("Launch failed: {0}")]
+pub enum GrpcError {
+    #[error("serve failed: {0}")]
+    Serve(String),
+}
+
+#[derive(Debug, Error)]
+pub enum BrowserError {
+    #[error("launch failed: {0}")]
     Launch(String),
-
-    #[error("Navigate failed: {0}")]
+    #[error("navigate failed: {0}")]
     Navigate(String),
-
-    #[error("Screenshot failed: {0}")]
+    #[error("screenshot failed: {0}")]
     Screenshot(String),
-
-    #[error("Click failed: {0}")]
+    #[error("click failed: {0}")]
     Click(String),
-
-    #[error("Type text failed: {0}")]
+    #[error("type text failed: {0}")]
     TypeText(String),
-
-    #[error("Eval JS failed: {0}")]
+    #[error("eval JS failed: {0}")]
     EvalJs(String),
-
-    #[error("Context operation failed: {0}")]
+    #[error("context operation failed: {0}")]
     Context(String),
-
-    #[error("Browser close failed: {0}")]
+    #[error("close failed: {0}")]
     Close(String),
+}
+
+#[derive(Debug, Error)]
+pub enum AgentError {
+    #[error("TLS error: {0}")]
+    Tls(#[from] TlsError),
+    #[error("gRPC error: {0}")]
+    Grpc(#[from] GrpcError),
+    #[error("Browser error: {0}")]
+    Browser(#[from] BrowserError),
 }

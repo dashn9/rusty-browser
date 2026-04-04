@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
+use rcgen::generate_simple_self_signed;
 use serde::Serialize;
 use tracing::info;
 
-use rustmani_common::error::RustmaniError;
-
+use crate::http::error::AppError;
 use crate::AppState;
 
 const BROWSER_CONFIG_ENV_VAR: &str = "RUSTMANI_BROWSER_CONFIG";
-const PROXIES_FILENAME: &str = "agent-proxies.yaml";
+const TLS_CERT_FILENAME: &str = "agent.crt";
+const TLS_KEY_FILENAME: &str = "agent.key";
 
 #[derive(Serialize)]
 struct Resources {
@@ -39,7 +40,7 @@ impl InitializeService {
         Self { state }
     }
 
-    pub async fn run_initialization(&self) -> Result<(), RustmaniError> {
+    pub async fn run_initialization(&self) -> Result<(), AppError> {
         let function_name = self.state.config.flux.function_name.clone();
         let flux = &self.state.flux;
 
@@ -59,21 +60,26 @@ impl InitializeService {
         let agent_bytes = self.download_agent(version, filename).await?;
         info!("Downloaded {} byte(s)", agent_bytes.len());
 
+        info!("Generating TLS cert…");
+        let (cert_pem, key_pem) = generate_tls_cert()?;
+        self.state.redis.set_tls_cert(&cert_pem).await?;
+        info!("TLS cert stored");
+
         info!("Zipping {filename}…");
-        let proxies_yaml = self.get_proxies_yaml();
-        let zip_bytes = create_zip_with_proxies(filename, &agent_bytes, proxies_yaml)?;
+        let proxy_file = &self.state.config.proxy_file;
+        let tls_cert_tmp = write_temp(TLS_CERT_FILENAME, cert_pem.as_bytes())?;
+        let tls_key_tmp  = write_temp(TLS_KEY_FILENAME,  key_pem.as_bytes())?;
+        let zip_bytes = create_zip(filename, &agent_bytes, &[
+            proxy_file.as_str(),
+            &tls_cert_tmp,
+            &tls_key_tmp,
+        ])?;
 
         info!("Uploading '{filename}.zip' to Flux as function '{function_name}'…");
-        flux.deploy_function_multipart(&function_name, &format!("{filename}.zip"), zip_bytes)
-            .await?;
+        flux.deploy_function_multipart(&function_name, &format!("{filename}.zip"), zip_bytes).await?;
         info!("Agent '{function_name}' v{version} deployed");
 
         Ok(())
-    }
-
-    fn get_proxies_yaml(&self) -> Option<String> {
-        let path = self.state.config.proxy_file.as_deref()?;
-        std::fs::read_to_string(path).ok()
     }
 
     fn get_browser_config_json(&self) -> Option<String> {
@@ -81,41 +87,30 @@ impl InitializeService {
         serde_json::to_string(chrome_config).ok()
     }
 
-    async fn download_agent(
-        &self,
-        version: &str,
-        filename: &str,
-    ) -> Result<Vec<u8>, RustmaniError> {
-        let base = self
-            .state
-            .config
-            .flux
-            .github_release_base_url
+    async fn download_agent(&self, version: &str, filename: &str) -> Result<Vec<u8>, AppError> {
+        let base = self.state.config.flux.github_release_base_url
             .as_deref()
             .unwrap_or("https://github.com/dashn9/rustmani/releases/download");
 
         let url = format!("{base}/v{version}/{filename}");
         info!("GET {url}");
 
-        let client = reqwest::Client::new();
-        let resp = client
+        let resp = reqwest::Client::new()
             .get(&url)
             .send()
             .await
-            .map_err(|e| RustmaniError::Internal(format!("Download failed: {e}")))?;
+            .map_err(|e| AppError::Internal(format!("Download failed: {e}")))?;
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
-            return Err(RustmaniError::Internal(format!(
-                "Download returned HTTP {status}: {body}"
-            )));
+            return Err(AppError::Internal(format!("Download returned HTTP {status}: {body}")));
         }
 
         resp.bytes()
             .await
             .map(|b| b.to_vec())
-            .map_err(|e| RustmaniError::Internal(format!("Failed to read download body: {e}")))
+            .map_err(|e| AppError::Internal(format!("Failed to read download body: {e}")))
     }
 }
 
@@ -123,7 +118,7 @@ fn build_function_yaml(
     name: &str,
     browser_config_json: &Option<String>,
     agent_env: &std::collections::HashMap<String, String>,
-) -> Result<String, RustmaniError> {
+) -> Result<String, AppError> {
     let mut env_vars = serde_yaml::Mapping::new();
 
     if let Some(config) = browser_config_json {
@@ -143,10 +138,7 @@ fn build_function_yaml(
     let spec = FunctionSpec {
         name: name.to_string(),
         handler: name.to_string(),
-        resources: Resources {
-            cpu: 1,
-            memory: 2048,
-        },
+        resources: Resources { cpu: 1, memory: 2048 },
         timeout: 30,
         max_concurrency: 200,
         max_concurrency_behaviour: "wait".to_string(),
@@ -155,41 +147,58 @@ fn build_function_yaml(
     };
 
     serde_yaml::to_string(&spec)
-        .map_err(|e| RustmaniError::Internal(format!("YAML serialization failed: {e}")))
+        .map_err(|e| AppError::Internal(format!("YAML serialization failed: {e}")))
 }
 
-fn create_zip_with_proxies(
-    filename: &str,
-    agent_data: &[u8],
-    proxies_yaml: Option<String>,
-) -> Result<Vec<u8>, RustmaniError> {
+fn create_zip(binary_name: &str, binary_data: &[u8], extra_files: &[&str]) -> Result<Vec<u8>, AppError> {
     use std::io::{Cursor, Write};
-    let cursor = Cursor::new(Vec::new());
-    let mut zip = zip::ZipWriter::new(cursor);
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
 
-    let options = zip::write::SimpleFileOptions::default()
+    let exe_opts = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o755);
+    let file_opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o644);
 
-    zip.start_file(filename, options)
-        .map_err(|e| RustmaniError::Internal(format!("zip start_file: {}", e)))?;
+    zip.start_file(binary_name, exe_opts)
+        .map_err(|e| AppError::Internal(format!("zip: {e}")))?;
+    zip.write_all(binary_data)
+        .map_err(|e| AppError::Internal(format!("zip: {e}")))?;
 
-    zip.write_all(agent_data)
-        .map_err(|e| RustmaniError::Internal(format!("zip write_all: {}", e)))?;
-
-    if let Some(proxies) = proxies_yaml {
-        let file_options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated)
-            .unix_permissions(0o644);
-
-        zip.start_file(PROXIES_FILENAME, file_options)
-            .map_err(|e| RustmaniError::Internal(format!("zip start_file proxies: {}", e)))?;
-
-        zip.write_all(proxies.as_bytes())
-            .map_err(|e| RustmaniError::Internal(format!("zip write_all proxies: {}", e)))?;
+    for path in extra_files {
+        match std::fs::read(path) {
+            Ok(data) => {
+                let name = std::path::Path::new(path)
+                    .file_name().and_then(|n| n.to_str()).unwrap_or(path);
+                zip.start_file(name, file_opts)
+                    .map_err(|e| AppError::Internal(format!("zip: {e}")))?;
+                zip.write_all(&data)
+                    .map_err(|e| AppError::Internal(format!("zip: {e}")))?;
+                tracing::info!("Bundled {path} as {name}");
+            }
+            Err(e) => tracing::warn!("Skipping {path}: {e}"),
+        }
     }
 
     zip.finish()
         .map(|c| c.into_inner())
-        .map_err(|e| RustmaniError::Internal(format!("zip finish: {}", e)))
+        .map_err(|e| AppError::Internal(format!("zip finish: {e}")))
+}
+
+fn generate_tls_cert() -> Result<(String, String), AppError> {
+    let cert = generate_simple_self_signed(vec!["rustmani-agent".to_string()])
+        .map_err(|e| AppError::Internal(format!("TLS cert generation failed: {e}")))?;
+    let cert_pem = cert.cert.pem();
+    let key_pem = cert.key_pair.serialize_pem();
+    Ok((cert_pem, key_pem))
+}
+
+fn write_temp(name: &str, data: &[u8]) -> Result<String, AppError> {
+    let path = std::env::temp_dir().join(name);
+    std::fs::write(&path, data)
+        .map_err(|e| AppError::Internal(format!("write temp {name}: {e}")))?;
+    path.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::Internal(format!("invalid temp path for {name}")))
 }

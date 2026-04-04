@@ -25,7 +25,8 @@ redis = "1.1.0"
 base64 = "0.22.1"
 image = "0.25.10"
 axum = "0.8.8"
-tonic = { version = "0.14.5" }
+tonic = { version = "0.14.5", features = ["tls-ring"] }
+rcgen = "0.13"
 prost = "0.14.3"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 anyhow = "1.0"

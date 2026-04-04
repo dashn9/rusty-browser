@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::error::RustmaniError;
+use crate::error::ConfigError;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RustmaniConfig {
@@ -12,8 +12,8 @@ pub struct RustmaniConfig {
     #[serde(default)]
     pub browser: BrowserConfig,
     /// Path to the agent-proxies.yaml file to bundle into the agent deployment.
-    #[serde(default)]
-    pub proxy_file: Option<String>,
+    #[serde(default = "default_proxy_file")]
+    pub proxy_file: String,
     /// Extra environment variables injected into the agent function spec.
     #[serde(default)]
     pub agent_env: std::collections::HashMap<String, String>,
@@ -127,19 +127,21 @@ pub struct FluxConfig {
     pub github_release_base_url: Option<String>,
 }
 
+fn default_proxy_file() -> String {
+    "agent-proxies.yaml".to_string()
+}
+
 fn default_function_name() -> String {
-    std::env::var("FLUX_FUNCTION_NAME").unwrap_or_else(|_| "rustmani-agent".to_string())
+    "rustmani-agent".to_string()
 }
 
 impl RustmaniConfig {
-    pub fn load(path: &str) -> Result<Self, RustmaniError> {
+    pub fn load(path: &str) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| RustmaniError::Config(format!("Failed to read config: {e}")))?;
-
+            .map_err(|e| ConfigError::Read(e.to_string()))?;
         let content = substitute_env_vars(&content);
-
         yaml_serde::from_str(&content)
-            .map_err(|e| RustmaniError::Config(format!("Failed to parse config: {e}")))
+            .map_err(|e| ConfigError::Parse(e.to_string()))
     }
 }
 

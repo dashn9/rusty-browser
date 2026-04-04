@@ -3,21 +3,21 @@ use base64::Engine;
 use std::sync::Arc;
 
 use rustmani_common::ai::BrowserAction;
-use rustmani_common::error::RustmaniError;
 
+use crate::http::error::AppError;
 use crate::AppState;
 
 #[async_trait]
 pub trait AIInstructor: Send + Sync {
     fn state(&self) -> &Arc<AppState>;
-    
-    async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, RustmaniError>;
-    
-    async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), RustmaniError>;
-    
-    async fn instruct(&self, browser_id: &str, instruction: &str) -> Result<(), RustmaniError> {
+
+    async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, AppError>;
+
+    async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), AppError>;
+
+    async fn instruct(&self, browser_id: &str, instruction: &str) -> Result<(), AppError> {
         let raw = self.screenshot(browser_id).await?
-            .ok_or_else(|| RustmaniError::Internal("No screenshot data".into()))?;
+            .ok_or_else(|| AppError::Internal("No screenshot data".into()))?;
 
         let processed = downscale(
             &raw,
@@ -29,7 +29,7 @@ pub trait AIInstructor: Send + Sync {
         let ai_response = self.state().ai_provider
             .analyze_screenshot(b64, instruction.to_string())
             .await
-            .map_err(|e| RustmaniError::Internal(e.to_string()))?;
+            .map_err(AppError::AI)?;
 
         for action in &ai_response {
             self.dispatch(browser_id, action).await?;
@@ -39,12 +39,12 @@ pub trait AIInstructor: Send + Sync {
     }
 }
 
-fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, RustmaniError> {
+fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, AppError> {
     if data.is_empty() {
         return Ok(data.to_vec());
     }
     let img = image::load_from_memory(data)
-        .map_err(|e| RustmaniError::Internal(format!("Decode: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("Decode: {e}")))?;
     let img = if img.width() > max_width {
         let ratio = max_width as f32 / img.width() as f32;
         img.resize(
@@ -60,6 +60,6 @@ fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, Rustm
         &mut buf,
         quality as u8,
     ))
-    .map_err(|e| RustmaniError::Internal(format!("Encode: {e}")))?;
+    .map_err(|e| AppError::Internal(format!("Encode: {e}")))?;
     Ok(buf.into_inner())
 }

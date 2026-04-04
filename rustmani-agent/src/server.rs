@@ -10,6 +10,7 @@ use rustmani_proto::browser_agent_server::{BrowserAgent, BrowserAgentServer};
 use rustmani_proto::{BrowserCommand, CommandResult};
 
 use crate::browser::ManagedBrowser;
+use crate::error::{GrpcError, TlsError};
 use crate::executor;
 
 struct BrowserAgentService {
@@ -34,9 +35,12 @@ impl BrowserAgent for BrowserAgentService {
 }
 
 pub async fn serve(browser: ManagedBrowser, browser_id: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let cert = std::fs::read_to_string("tls/agent.crt")?;
-    let key = std::fs::read_to_string("tls/agent.key")?;
-    let tls = ServerTlsConfig::new().identity(Identity::from_pem(&cert, &key));
+    let cert = std::fs::read_to_string("agent.crt")
+        .map_err(|e| TlsError::CertRead(e.to_string()))?;
+    let key = std::fs::read_to_string("agent.key")
+        .map_err(|e| TlsError::KeyRead(e.to_string()))?;
+    let tls = ServerTlsConfig::new()
+        .identity(Identity::from_pem(&cert, &key));
 
     // Port 0 — OS assigns a free port, safe for multiple agents on the same node
     let listener = TcpListener::bind("0.0.0.0:0").await?;
@@ -53,12 +57,14 @@ pub async fn serve(browser: ManagedBrowser, browser_id: &str) -> std::result::Re
     tracing::info!("Browser agent {browser_id} listening on {host}:{grpc_port} (TLS)");
 
     Server::builder()
-        .tls_config(tls)?
+        .tls_config(tls)
+        .map_err(|e| TlsError::Config(e.to_string()))?
         .add_service(BrowserAgentServer::new(BrowserAgentService {
             browser: Arc::new(Mutex::new(browser)),
         }))
         .serve_with_incoming(TcpListenerStream::new(listener))
-        .await?;
+        .await
+        .map_err(|e| GrpcError::Serve(e.to_string()))?;
 
     Ok(())
 }

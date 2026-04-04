@@ -3,8 +3,8 @@ use std::sync::Arc;
 use tracing::info;
 
 use rustmani_common::ai::{AIContent, AIMessage, BrowserAction};
-use rustmani_common::error::RustmaniError;
 
+use crate::http::error::AppError;
 use crate::AppState;
 
 pub async fn run(
@@ -12,12 +12,13 @@ pub async fn run(
     browser_id: &str,
     instruction: &str,
     max_steps: u32,
-) -> Result<(), RustmaniError> {
-    let browser = state.redis.get_browser(browser_id).await?;
+) -> Result<(), AppError> {
+    let browser = state.redis.get_browser(browser_id).await?
+        .ok_or_else(|| AppError::NotFound(browser_id.to_string()))?;
     let addr = format!("https://{}:{}", browser.host, browser.grpc_port);
     let mut client = rustmani_proto::browser_agent_client::BrowserAgentClient::connect(addr)
         .await
-        .map_err(|e| RustmaniError::Internal(format!("Failed to connect to browser agent: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("Failed to connect to browser agent: {e}")))?;
 
     let mut history: Vec<AIMessage> = Vec::new();
 
@@ -38,11 +39,11 @@ pub async fn run(
                 )),
             }))
             .await
-            .map_err(|e| RustmaniError::Internal(format!("Screenshot failed: {e}")))?
+            .map_err(|e| AppError::Internal(format!("Screenshot failed: {e}")))?
             .into_inner();
 
         let screenshot_data = result.screenshot
-            .ok_or_else(|| RustmaniError::Internal("No screenshot data in response".into()))?;
+            .ok_or_else(|| AppError::Internal("No screenshot data in response".into()))?;
 
         let processed = downscale(&screenshot_data.data, state.config.ai.resolution.max_width, state.config.ai.resolution.quality)?;
         let screenshot_b64 = base64::engine::general_purpose::STANDARD.encode(&processed);
@@ -90,7 +91,7 @@ async fn dispatch_action(
     client: &mut rustmani_proto::browser_agent_client::BrowserAgentClient<tonic::transport::Channel>,
     browser_id: &str,
     action: &BrowserAction,
-) -> Result<(), RustmaniError> {
+) -> Result<(), AppError> {
     let proto_action = match action {
         BrowserAction::Navigate { url } => rustmani_proto::browser_command::Action::Navigate(
             rustmani_proto::Navigate { url: url.clone(), wait_until: "complete".to_string() },
@@ -120,16 +121,16 @@ async fn dispatch_action(
         action: Some(proto_action),
     }))
     .await
-    .map_err(|e| RustmaniError::Internal(format!("Action failed: {e}")))?;
+    .map_err(|e| AppError::Internal(format!("Action failed: {e}")))?;
 
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     Ok(())
 }
 
-fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, RustmaniError> {
+fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, AppError> {
     if data.is_empty() { return Ok(data.to_vec()); }
     let img = image::load_from_memory(data)
-        .map_err(|e| RustmaniError::Internal(format!("Failed to decode screenshot: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("Failed to decode screenshot: {e}")))?;
     let img = if img.width() > max_width {
         let ratio = max_width as f32 / img.width() as f32;
         img.resize(max_width, (img.height() as f32 * ratio) as u32, image::imageops::FilterType::Lanczos3)
@@ -138,6 +139,6 @@ fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, Rustm
     };
     let mut buf = std::io::Cursor::new(Vec::new());
     img.write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality as u8))
-        .map_err(|e| RustmaniError::Internal(format!("Failed to encode screenshot: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("Failed to encode screenshot: {e}")))?;
     Ok(buf.into_inner())
 }

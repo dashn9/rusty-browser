@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use rustmani_common::ai::BrowserAction;
-use rustmani_common::error::RustmaniError;
+use rustmani_common::error::BrowserError;
 use rustmani_common::state::BrowserInfo;
 use rustmani_proto::browser_agent_client::BrowserAgentClient;
 use rustmani_proto::browser_command::Action;
 use rustmani_proto::*;
 
+use crate::http::error::AppError;
 use crate::services::instruct_service::AIInstructor;
 use crate::AppState;
 
@@ -24,7 +25,7 @@ impl BrowserService {
         Self { state }
     }
 
-    pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<BrowserInfo, RustmaniError> {
+    pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<BrowserInfo, AppError> {
         let browser_id = Uuid::new_v4().to_string();
         let args: Vec<String> = identity.into_iter().map(|id| id.to_string()).collect();
         let browser = self.state.flux.execute_function(&self.state.config.flux.function_name, &browser_id, &args).await?;
@@ -32,44 +33,51 @@ impl BrowserService {
         Ok(browser)
     }
 
-    pub async fn list_browsers(&self) -> Result<Vec<BrowserInfo>, RustmaniError> {
-        self.state.redis.list_browsers().await
+    pub async fn list_browsers(&self) -> Result<Vec<BrowserInfo>, AppError> {
+        Ok(self.state.redis.list_browsers().await?)
     }
 
-    pub async fn get_browser(&self, id: &str) -> Result<BrowserInfo, RustmaniError> {
-        self.state.redis.get_browser(id).await
+    pub async fn get_browser(&self, id: &str) -> Result<BrowserInfo, AppError> {
+        self.state.redis.get_browser(id).await?
+            .ok_or_else(|| AppError::Browser(BrowserError::NotFound(id.to_string())))
     }
 
-    pub async fn delete_browser(&self, id: &str) -> Result<(), RustmaniError> {
-        self.exec(id, "", Action::CloseBrowser(CloseBrowser {})).await?;
-        self.state.redis.remove_browser(id).await
+    pub async fn delete_browser(&self, id: &str) -> Result<(), AppError> {
+        self.exec(id, "", Action::CloseBrowser(CloseBrowser {})).await
+            .or_else(|e| match e {
+                AppError::Browser(BrowserError::NotFound(_)) => Ok(()),
+                other => Err(other),
+            })?;
+        self.state.redis.remove_browser(id).await?;
+        Ok(())
     }
 
-    pub async fn create_context(&self, browser_id: &str) -> Result<String, RustmaniError> {
+    pub async fn create_context(&self, browser_id: &str) -> Result<String, AppError> {
         let context_id = Uuid::new_v4().to_string();
         self.exec(browser_id, &context_id, Action::CreateContext(CreateContext { url: None })).await?;
         self.state.redis.add_context(browser_id, &context_id).await?;
         Ok(context_id)
     }
 
-    pub async fn delete_context(&self, browser_id: &str, ctx_id: &str) -> Result<(), RustmaniError> {
+    pub async fn delete_context(&self, browser_id: &str, ctx_id: &str) -> Result<(), AppError> {
         self.exec(browser_id, ctx_id, Action::CloseContext(CloseContext { context_id: ctx_id.to_string() })).await?;
-        self.state.redis.remove_context(browser_id, ctx_id).await
+        self.state.redis.remove_context(browser_id, ctx_id).await?;
+        Ok(())
     }
 
-    pub async fn navigate(&self, browser_id: &str, url: String, wait_until: Option<String>) -> Result<(), RustmaniError> {
+    pub async fn navigate(&self, browser_id: &str, url: String, wait_until: Option<String>) -> Result<(), AppError> {
         self.exec(browser_id, "", Action::Navigate(Navigate { url, wait_until: wait_until.unwrap_or_default() })).await
     }
 
-    pub async fn click(&self, browser_id: &str, x: f32, y: f32, human: bool) -> Result<(), RustmaniError> {
+    pub async fn click(&self, browser_id: &str, x: f32, y: f32, human: bool) -> Result<(), AppError> {
         self.exec(browser_id, "", Action::Click(Click { selector: None, x: Some(x), y: Some(y), human })).await
     }
 
-    pub async fn type_text(&self, browser_id: &str, text: String, selector: Option<String>) -> Result<(), RustmaniError> {
+    pub async fn type_text(&self, browser_id: &str, text: String, selector: Option<String>) -> Result<(), AppError> {
         self.exec(browser_id, "", Action::TypeText(Type { text, selector })).await
     }
 
-    pub async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, RustmaniError> {
+    pub async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, AppError> {
         let result = self.exec_inner(browser_id, "", Action::Screenshot(Screenshot {
             quality: self.state.config.ai.resolution.quality,
             format: self.state.config.ai.resolution.format.clone(),
@@ -77,11 +85,11 @@ impl BrowserService {
         Ok(result.screenshot.map(|s| s.data))
     }
 
-    pub async fn eval_js(&self, browser_id: &str, script: String) -> Result<(), RustmaniError> {
+    pub async fn eval_js(&self, browser_id: &str, script: String) -> Result<(), AppError> {
         self.exec(browser_id, "", Action::EvalJs(EvalJs { script })).await
     }
 
-    pub async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), RustmaniError> {
+    pub async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), AppError> {
         let proto_action = match action {
             BrowserAction::Navigate { url } => Action::Navigate(
                 Navigate { url: url.clone(), wait_until: "complete".to_string() },
@@ -107,14 +115,12 @@ impl BrowserService {
         self.exec(browser_id, "", proto_action).await
     }
 
-    /// Look up browser, connect, execute action, discard result.
-    async fn exec(&self, browser_id: &str, context_id: &str, action: Action) -> Result<(), RustmaniError> {
+    async fn exec(&self, browser_id: &str, context_id: &str, action: Action) -> Result<(), AppError> {
         self.exec_inner(browser_id, context_id, action).await.map(|_| ())
     }
 
-    /// Look up browser, connect, execute action, return raw CommandResult.
-    async fn exec_inner(&self, browser_id: &str, context_id: &str, action: Action) -> Result<CommandResult, RustmaniError> {
-        let browser = self.state.redis.get_browser(browser_id).await?;
+    async fn exec_inner(&self, browser_id: &str, context_id: &str, action: Action) -> Result<CommandResult, AppError> {
+        let browser = self.get_browser(browser_id).await?;
         self.connect(&browser).await?
             .execute(tonic::Request::new(BrowserCommand {
                 browser_id: browser_id.to_string(),
@@ -123,14 +129,26 @@ impl BrowserService {
             }))
             .await
             .map(|r| r.into_inner())
-            .map_err(|e| RustmaniError::Internal(format!("gRPC: {e}")))
+            .map_err(|e| AppError::Internal(format!("gRPC: {e}")))
     }
 
-    async fn connect(&self, browser: &BrowserInfo) -> Result<GrpcClient, RustmaniError> {
+    async fn connect(&self, browser: &BrowserInfo) -> Result<GrpcClient, AppError> {
+        let cert_pem = self.state.redis.get_tls_cert().await?
+            .ok_or_else(|| AppError::Internal("TLS cert not found — run /initialize first".into()))?;
+
+        let tls = tonic::transport::ClientTlsConfig::new()
+            .ca_certificate(tonic::transport::Certificate::from_pem(&cert_pem))
+            .domain_name("rustmani-agent");
+
         let addr = format!("https://{}:{}", browser.host, browser.grpc_port);
-        GrpcClient::connect(addr)
+        tonic::transport::Channel::from_shared(addr)
+            .map_err(|e| AppError::Internal(format!("Invalid addr: {e}")))?
+            .tls_config(tls)
+            .map_err(|e| AppError::Internal(format!("TLS config: {e}")))?
+            .connect()
             .await
-            .map_err(|e| RustmaniError::Internal(format!("Connect: {e}")))
+            .map(GrpcClient::new)
+            .map_err(|e| AppError::Internal(format!("Connect: {e}")))
     }
 }
 
@@ -140,11 +158,11 @@ impl AIInstructor for BrowserService {
         &self.state
     }
 
-    async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, RustmaniError> {
+    async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, AppError> {
         BrowserService::screenshot(self, browser_id).await
     }
 
-    async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), RustmaniError> {
+    async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), AppError> {
         BrowserService::dispatch(self, browser_id, action).await
     }
 }

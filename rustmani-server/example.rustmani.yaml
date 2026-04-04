@@ -23,6 +23,9 @@ flux:
   api_key: "your_flux_api_key"
   function_name: "rustmani-agent"
 
+# Path to the proxy list file to bundle with the agent (defaults to agent-proxies.yaml)
+# proxy_file: "agent-proxies.yaml"
+
 # agent_env:
 #   MY_VAR: "value"
 

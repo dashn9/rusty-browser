@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 
-use crate::error::{FluxError, RustmaniError};
+use crate::error::FluxError;
 use crate::state::BrowserInfo;
 
 #[derive(Clone)]
@@ -26,58 +26,51 @@ impl FluxClient {
         }
     }
 
-    pub async fn health(&self) -> Result<bool, RustmaniError> {
-        let resp = self.client.get(format!("{}/health", self.url)).send().await
-            .map_err(FluxError::Request)?;
+    pub async fn health(&self) -> Result<bool, FluxError> {
+        let resp = self.client.get(format!("{}/health", self.url)).send().await?;
         Ok(resp.status().is_success())
     }
 
-    pub async fn initialize(&self) -> Result<(), RustmaniError> {
+    pub async fn initialize(&self) -> Result<(), FluxError> {
         let resp = self.client
             .post(format!("{}/initialize", self.url))
             .header("X-API-Key", &self.token)
             .send()
-            .await
-            .map_err(FluxError::Request)?;
+            .await?;
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
-            return Err(FluxError::Http { status, body }.into());
+            return Err(FluxError::Http { status, body });
         }
         Ok(())
     }
 
-    pub async fn register_function(&self, yaml_body: &str) -> Result<(), RustmaniError> {
+    pub async fn register_function(&self, yaml_body: &str) -> Result<(), FluxError> {
         let resp = self.client
             .put(format!("{}/functions", self.url))
             .header("X-API-Key", &self.token)
             .header("Content-Type", "application/yaml")
             .body(yaml_body.to_string())
             .send()
-            .await
-            .map_err(FluxError::Request)?;
+            .await?;
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
-            return Err(FluxError::Http { status, body }.into());
+            return Err(FluxError::Http { status, body });
         }
         Ok(())
     }
 
-    /// Deploy a `.deb` package to Flux as a multipart form upload.
-    ///
-    /// `filename` becomes the `filename` attribute on the multipart part so
-    /// Flux can identify the package by name.
     pub async fn deploy_function_multipart(
         &self,
         name: &str,
         filename: &str,
         zip_bytes: Vec<u8>,
-    ) -> Result<(), RustmaniError> {
+    ) -> Result<(), FluxError> {
         let part = reqwest::multipart::Part::bytes(zip_bytes)
             .file_name(filename.to_string())
             .mime_str("application/zip")
-            .map_err(|e| FluxError::Request(e))?;
+            .map_err(FluxError::Request)?;
 
         let form = reqwest::multipart::Form::new().part("file", part);
 
@@ -86,13 +79,12 @@ impl FluxClient {
             .header("X-API-Key", &self.token)
             .multipart(form)
             .send()
-            .await
-            .map_err(FluxError::Request)?;
+            .await?;
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
-            return Err(FluxError::Http { status, body }.into());
+            return Err(FluxError::Http { status, body });
         }
         Ok(())
     }
@@ -128,17 +120,16 @@ impl FluxClient {
             .map_err(|e| FluxError::Parse(format!("Failed to parse agent info: {e}")))
     }
 
-    pub async fn terminate_all_nodes(&self) -> Result<(), RustmaniError> {
+    pub async fn terminate_all_nodes(&self) -> Result<(), FluxError> {
         let resp = self.client
             .delete(format!("{}/nodes", self.url))
             .header("X-API-Key", &self.token)
             .send()
-            .await
-            .map_err(FluxError::Request)?;
+            .await?;
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
-            return Err(FluxError::Http { status, body }.into());
+            return Err(FluxError::Http { status, body });
         }
         Ok(())
     }

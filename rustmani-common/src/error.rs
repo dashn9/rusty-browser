@@ -1,42 +1,31 @@
 use thiserror::Error;
 
-/// Errors scoped to browser command dispatch and gRPC connectivity (server-side).
 #[derive(Debug, Error)]
-pub enum BrowserError {
-    #[error("Browser not found: {0}")]
-    NotFound(String),
-
-    #[error("gRPC connection failed: {0}")]
-    Connect(String),
-
-    #[error("gRPC command failed: {0}")]
-    Command(String),
-
-    #[error("Screenshot returned no data")]
-    NoScreenshot,
+pub enum StorageError {
+    #[error("redis error: {0}")]
+    Redis(#[from] redis::RedisError),
 }
 
-impl From<BrowserError> for RustmaniError {
-    fn from(e: BrowserError) -> Self {
-        match e {
-            BrowserError::NotFound(id) => RustmaniError::BrowserNotFound(id),
-            other => RustmaniError::Internal(other.to_string()),
-        }
-    }
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("failed to read config file: {0}")]
+    Read(String),
+    #[error("failed to parse config: {0}")]
+    Parse(String),
 }
 
 #[derive(Debug, Error)]
 pub enum FluxError {
-    #[error("Flux HTTP error ({status}): {body}")]
+    #[error("HTTP error ({status}): {body}")]
     Http { status: u16, body: String },
 
-    #[error("Flux execution error: {0}")]
+    #[error("execution error: {0}")]
     Execution(String),
 
-    #[error("Failed to parse Flux response: {0}")]
+    #[error("failed to parse response: {0}")]
     Parse(String),
 
-    #[error("Flux request failed: {0}")]
+    #[error("request failed: {0}")]
     Request(#[from] reqwest::Error),
 }
 
@@ -53,25 +42,17 @@ pub enum AIError {
 }
 
 #[derive(Debug, Error)]
-pub enum RustmaniError {
-    #[error("Redis error: {0}")]
-    Redis(#[from] redis::RedisError),
+pub enum GrpcError {
+    #[error("connection failed: {0}")]
+    Connect(String),
+    #[error("command failed: {0}")]
+    Command(String),
+}
 
-    #[error("Browser not found: {0}")]
-    BrowserNotFound(String),
-
-    #[error("Flux error: {0}")]
-    Flux(#[from] FluxError),
-
-    #[error("AI provider error: {0}")]
-    AIProvider(String),
-
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    #[error("Unauthorized")]
-    Unauthorized,
-
-    #[error("{0}")]
-    Internal(String),
+#[derive(Debug, Error)]
+pub enum BrowserError {
+    #[error("browser not found: {0}")]
+    NotFound(String),
+    #[error("no screenshot data")]
+    NoScreenshot,
 }

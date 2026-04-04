@@ -22,15 +22,12 @@ pub async fn create_browser(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateBrowserRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    let browser = svc(&state)
-        .create_browser(req.identity)
-        .await
-        .map_err(AppError::from)?;
+    let browser = svc(&state).create_browser(req.identity).await?;
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "browser_id": browser.browser_id }))))
 }
 
 pub async fn list_browsers(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, AppError> {
-    let browsers = svc(&state).list_browsers().await.map_err(AppError::from)?;
+    let browsers = svc(&state).list_browsers().await?;
     Ok(Json(serde_json::json!(browsers)))
 }
 
@@ -38,10 +35,7 @@ pub async fn get_browser(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let browser = svc(&state)
-        .get_browser(&id)
-        .await
-        .map_err(AppError::from)?;
+    let browser = svc(&state).get_browser(&id).await?;
     Ok(Json(serde_json::json!(browser)))
 }
 
@@ -49,7 +43,7 @@ pub async fn delete_browser(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).delete_browser(&id).await.map_err(AppError::from)?;
+    svc(&state).delete_browser(&id).await?;
     Ok(Json(serde_json::json!({ "deleted": id })))
 }
 
@@ -57,10 +51,7 @@ pub async fn create_context(
     State(state): State<Arc<AppState>>,
     Path(browser_id): Path<String>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    let context_id = svc(&state)
-        .create_context(&browser_id)
-        .await
-        .map_err(AppError::from)?;
+    let context_id = svc(&state).create_context(&browser_id).await?;
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "browser_id": browser_id, "context_id": context_id }))))
 }
 
@@ -68,10 +59,7 @@ pub async fn delete_context(
     State(state): State<Arc<AppState>>,
     Path((browser_id, ctx_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state)
-        .delete_context(&browser_id, &ctx_id)
-        .await
-        .map_err(AppError::from)?;
+    svc(&state).delete_context(&browser_id, &ctx_id).await?;
     Ok(Json(serde_json::json!({ "deleted_context": ctx_id, "browser_id": browser_id })))
 }
 
@@ -86,10 +74,7 @@ pub async fn navigate(
     Path(id): Path<String>,
     Json(req): Json<NavigateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state)
-        .navigate(&id, req.url, req.wait_until)
-        .await
-        .map_err(AppError::from)?;
+    svc(&state).navigate(&id, req.url, req.wait_until).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -105,10 +90,7 @@ pub async fn click(
     Path(id): Path<String>,
     Json(req): Json<ClickRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state)
-        .click(&id, req.x, req.y, req.human.unwrap_or(true))
-        .await
-        .map_err(AppError::from)?;
+    svc(&state).click(&id, req.x, req.y, req.human.unwrap_or(true)).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -123,10 +105,7 @@ pub async fn type_text(
     Path(id): Path<String>,
     Json(req): Json<TypeRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state)
-        .type_text(&id, req.text, req.selector)
-        .await
-        .map_err(AppError::from)?;
+    svc(&state).type_text(&id, req.text, req.selector).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -134,7 +113,7 @@ pub async fn screenshot(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let data = svc(&state).screenshot(&id).await.map_err(AppError::from)?
+    let data = svc(&state).screenshot(&id).await?
         .map(|d| base64::engine::general_purpose::STANDARD.encode(&d));
     Ok(Json(serde_json::json!({ "data": data })))
 }
@@ -149,10 +128,7 @@ pub async fn eval_js(
     Path(id): Path<String>,
     Json(req): Json<EvalRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state)
-        .eval_js(&id, req.script)
-        .await
-        .map_err(AppError::from)?;
+    svc(&state).eval_js(&id, req.script).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -166,9 +142,6 @@ pub async fn instruct(
     Path(id): Path<String>,
     Json(req): Json<InstructRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state)
-        .instruct(&id, &req.instruction)
-        .await
-        .map_err(AppError::from)?;
+    svc(&state).instruct(&id, &req.instruction).await?;
     Ok(Json(serde_json::json!({ "browser_id": id, "status": "completed" })))
 }

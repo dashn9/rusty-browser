@@ -1,8 +1,8 @@
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
-use crate::error::RustmaniError;
-use crate::state::*;
+use crate::error::StorageError;
+use crate::state::{BrowserInfo, BrowserState};
 
 #[derive(Clone)]
 pub struct RedisStore {
@@ -11,7 +11,7 @@ pub struct RedisStore {
 }
 
 impl RedisStore {
-    pub async fn new(url: &str, prefix: &str) -> Result<Self, RustmaniError> {
+    pub async fn new(url: &str, prefix: &str) -> Result<Self, StorageError> {
         let client = redis::Client::open(url)?;
         let conn = client.get_connection_manager().await?;
         Ok(Self { conn, prefix: prefix.to_string() })
@@ -23,7 +23,7 @@ impl RedisStore {
 
     // --- Browser ---
 
-    pub async fn add_browser(&self, info: &BrowserInfo) -> Result<(), RustmaniError> {
+    pub async fn add_browser(&self, info: &BrowserInfo) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         redis::pipe()
             .sadd(self.key(&["browsers"]), &info.browser_id)
@@ -37,7 +37,7 @@ impl RedisStore {
         Ok(())
     }
 
-    pub async fn get_browser(&self, browser_id: &str) -> Result<BrowserInfo, RustmaniError> {
+    pub async fn get_browser(&self, browser_id: &str) -> Result<Option<BrowserInfo>, StorageError> {
         let mut conn = self.conn.clone();
         let fields: Vec<Option<String>> = redis::cmd("HMGET")
             .arg(self.key(&["browser", browser_id]))
@@ -45,24 +45,22 @@ impl RedisStore {
             .query_async(&mut conn)
             .await?;
 
-        let host = fields[0].clone()
-            .ok_or_else(|| RustmaniError::BrowserNotFound(browser_id.to_string()))?;
+        let Some(host) = fields[0].clone() else { return Ok(None); };
         let grpc_port = fields[1].as_deref().unwrap_or("50051").parse().unwrap_or(50051);
         let state = BrowserState::from_str(fields[2].as_deref().unwrap_or("idle"));
         let contexts = self.list_contexts(browser_id).await.unwrap_or_default();
 
-        Ok(BrowserInfo { browser_id: browser_id.to_string(), host, grpc_port, state, contexts })
+        Ok(Some(BrowserInfo { browser_id: browser_id.to_string(), host, grpc_port, state, contexts }))
     }
 
-    pub async fn list_browsers(&self) -> Result<Vec<BrowserInfo>, RustmaniError> {
+    pub async fn list_browsers(&self) -> Result<Vec<BrowserInfo>, StorageError> {
         let mut conn = self.conn.clone();
         let ids: Vec<String> = conn.smembers(self.key(&["browsers"])).await?;
         let mut browsers = Vec::with_capacity(ids.len());
         for id in ids {
             match self.get_browser(&id).await {
-                Ok(b) => browsers.push(b),
-                Err(RustmaniError::BrowserNotFound(_)) => continue,
-                Err(e) => return Err(e),
+                Ok(Some(b)) => browsers.push(b),
+                _ => continue,
             }
         }
         Ok(browsers)
@@ -72,7 +70,7 @@ impl RedisStore {
         &self,
         browser_id: &str,
         state: &BrowserState,
-    ) -> Result<(), RustmaniError> {
+    ) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         let _: () = conn
             .hset(self.key(&["browser", browser_id]), "state", state.as_str())
@@ -80,7 +78,7 @@ impl RedisStore {
         Ok(())
     }
 
-    pub async fn remove_browser(&self, browser_id: &str) -> Result<(), RustmaniError> {
+    pub async fn remove_browser(&self, browser_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         redis::pipe()
             .srem(self.key(&["browsers"]), browser_id)
@@ -93,7 +91,7 @@ impl RedisStore {
 
     // --- Contexts (stored under browser_id) ---
 
-    pub async fn add_context(&self, browser_id: &str, context_id: &str) -> Result<(), RustmaniError> {
+    pub async fn add_context(&self, browser_id: &str, context_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         let _: () = conn
             .sadd(self.key(&["browser", browser_id, "contexts"]), context_id)
@@ -105,7 +103,7 @@ impl RedisStore {
         &self,
         browser_id: &str,
         context_id: &str,
-    ) -> Result<(), RustmaniError> {
+    ) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         let _: () = conn
             .srem(self.key(&["browser", browser_id, "contexts"]), context_id)
@@ -113,10 +111,23 @@ impl RedisStore {
         Ok(())
     }
 
-    pub async fn list_contexts(&self, browser_id: &str) -> Result<Vec<String>, RustmaniError> {
+    pub async fn list_contexts(&self, browser_id: &str) -> Result<Vec<String>, StorageError> {
         let mut conn = self.conn.clone();
         let ids = conn.smembers(self.key(&["browser", browser_id, "contexts"])).await?;
         Ok(ids)
+    }
+
+    // --- TLS cert (cluster-wide) ---
+
+    pub async fn set_tls_cert(&self, cert_pem: &str) -> Result<(), StorageError> {
+        let mut conn = self.conn.clone();
+        let _: () = conn.set(self.key(&["tls_cert"]), cert_pem).await?;
+        Ok(())
+    }
+
+    pub async fn get_tls_cert(&self) -> Result<Option<String>, StorageError> {
+        let mut conn = self.conn.clone();
+        Ok(conn.get(self.key(&["tls_cert"])).await?)
     }
 
     // --- Instruct state (keyed by browser_id) ---
@@ -129,7 +140,7 @@ impl RedisStore {
         max_steps: u32,
         instruction: &str,
         reasoning: &str,
-    ) -> Result<(), RustmaniError> {
+    ) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         let _: () = conn.hset_multiple(self.key(&["instruct", browser_id]), &[
             ("status", status),
@@ -144,7 +155,7 @@ impl RedisStore {
     pub async fn get_instruct_state(
         &self,
         browser_id: &str,
-    ) -> Result<Option<std::collections::HashMap<String, String>>, RustmaniError> {
+    ) -> Result<Option<std::collections::HashMap<String, String>>, StorageError> {
         let mut conn = self.conn.clone();
         let key = self.key(&["instruct", browser_id]);
         let exists: bool = conn.exists(&key).await?;
@@ -156,7 +167,7 @@ impl RedisStore {
         &self,
         browser_id: &str,
         message_json: &str,
-    ) -> Result<(), RustmaniError> {
+    ) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         let _: () = conn
             .rpush(self.key(&["instruct", browser_id, "history"]), message_json)
@@ -164,7 +175,7 @@ impl RedisStore {
         Ok(())
     }
 
-    pub async fn clear_instruct(&self, browser_id: &str) -> Result<(), RustmaniError> {
+    pub async fn clear_instruct(&self, browser_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         redis::pipe()
             .del(self.key(&["instruct", browser_id]))

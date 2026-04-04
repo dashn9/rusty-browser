@@ -12,10 +12,7 @@ pub async fn initialize(
     let function_name = state.config.flux.function_name.clone();
     let version = env!("CARGO_PKG_VERSION");
 
-    InitializeService::new(state)
-        .run_initialization()
-        .await
-        .map_err(AppError::from)?;
+    InitializeService::new(state).run_initialization().await?;
 
     Ok(Json(serde_json::json!({
         "status": "initialized",

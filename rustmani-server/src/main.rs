@@ -11,6 +11,7 @@ mod services;
 use rustmani_common::config::RustmaniConfig;
 use rustmani_common::flux::FluxClient;
 use rustmani_common::redis_store::RedisStore;
+use rustmani_common::util::{detect_public_ip, free_port};
 use rustmani_proto::master_server::MasterServer;
 
 pub struct AppState {
@@ -18,10 +19,17 @@ pub struct AppState {
     pub redis: RedisStore,
     pub flux: FluxClient,
     pub ai_provider: Box<dyn rustmani_common::ai::AIProvider>,
+    pub public_ip: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Ensure ring is used as the rustls crypto provider — reqwest and tonic both
+    // pull in rustls, and without an explicit selection the process panics.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install ring crypto provider");
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -32,8 +40,14 @@ async fn main() -> Result<()> {
     let config_path = std::env::var("RUSTMANI_CONFIG")
         .unwrap_or_else(|_| "rustmani.yaml".to_string());
 
-    let config = RustmaniConfig::load(&config_path)?;
+    let mut config = RustmaniConfig::load(&config_path)?;
+    let grpc_port = config.server.grpc_port.unwrap_or_else(free_port);
+    config.server.grpc_port = Some(grpc_port);
     info!("Loaded configuration from {config_path}");
+
+    let public_ip = detect_public_ip().await
+        .expect("failed to detect public IP — check network connectivity");
+    info!("Detected public IP: {public_ip}");
 
     let redis = RedisStore::new(&config.redis.url, &config.redis.key_prefix).await?;
     info!("Connected to Redis");
@@ -46,10 +60,11 @@ async fn main() -> Result<()> {
         redis,
         flux,
         ai_provider,
+        public_ip,
     });
 
     let http_port = config.server.http_port;
-    let grpc_port = config.server.grpc_port;
+    let grpc_port = config.server.grpc_port.expect("grpc_port resolved at startup");
 
     // Warn about agents that were spawned but never registered
     tokio::spawn({
@@ -89,7 +104,7 @@ async fn main() -> Result<()> {
     // gRPC server — agents connect here to register
     let grpc_state = state.clone();
     tokio::spawn(async move {
-        let addr = format!("0.0.0.0:{grpc_port}").parse().expect("valid grpc addr");
+        let addr = format!("0.0.0.0:{}", grpc_port).parse().expect("valid grpc addr");
         info!("Master gRPC listening on {addr} (TLS)");
         let identity = tonic::transport::Identity::from_pem(&master_cert_pem, &master_key_pem);
         tonic::transport::Server::builder()

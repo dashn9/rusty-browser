@@ -22,8 +22,7 @@ impl RedisStore {
     }
 
     // --- Pending executions ---
-    // Tracks spawned agents that haven't registered yet. No browser_id at this point —
-    // the agent generates it and provides it on registration.
+    // Tracks spawned agents that haven't registered yet.
 
     pub async fn store_pending_execution(&self, execution_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
@@ -44,7 +43,7 @@ impl RedisStore {
             .unwrap_or_default()
             .as_secs()
             .saturating_sub(older_than_secs);
-        // ZRANGEBYSCORE pending_agents 0 <cutoff> — members whose score (spawn time) predates cutoff
+        // ZRANGEBYSCORE pending_agents 0 <cutoff> — members whose score predates the cutoff
         let ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
             .arg(self.key(&["pending_agents"]))
             .arg(0)
@@ -55,75 +54,53 @@ impl RedisStore {
     }
 
     // --- Browser ---
-    // Created only once the agent registers with its real browser_id, host, and port.
+    // execution_id is the primary key. browser_id is stored as metadata only.
 
-    /// Insert or update a browser. Writes the execution_id → browser_id index as a permanent
-    /// key and removes the execution from the stale-agent watch.
+    /// Insert or update a browser record keyed by execution_id.
     pub async fn upsert_browser(&self, info: &BrowserInfo) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         redis::pipe()
-            // SADD browsers {browser_id} — track all known browser ids
-            .sadd(self.key(&["browsers"]), &info.browser_id)
-            // HMSET browser:{id} field val ... — store all fields in one round-trip
-            .hset_multiple(self.key(&["browser", &info.browser_id]), &[
-                ("execution_id", info.execution_id.as_str()),
+            // SADD browsers {execution_id} — track all registered executions
+            .sadd(self.key(&["browsers"]), &info.execution_id)
+            // HMSET browser:{execution_id} — all fields in one round-trip
+            .hset_multiple(self.key(&["browser", &info.execution_id]), &[
+                ("browser_id", info.browser_id.as_str()),
                 ("host", info.host.as_str()),
                 ("grpc_port", &info.grpc_port.to_string()),
                 ("state", info.state.as_str()),
             ])
-            // SET execution:{id} browser_id — permanent reverse index (no TTL)
-            .set(self.key(&["execution", &info.execution_id]), &info.browser_id)
-            // ZREM pending_agents {execution_id} — agent registered, no longer a stale candidate
+            // ZREM pending_agents {execution_id} — agent registered, no longer stale
             .zrem(self.key(&["pending_agents"]), &info.execution_id)
             .exec_async(&mut conn)
             .await?;
         Ok(())
     }
 
-    /// Accepts either a browser_id or an execution_id.
-    pub async fn get_browser(&self, id: &str) -> Result<Option<BrowserInfo>, StorageError> {
+    pub async fn get_browser(&self, execution_id: &str) -> Result<Option<BrowserInfo>, StorageError> {
         let mut conn = self.conn.clone();
-
-        // HMGET browser:{id} field ... — fetch multiple hash fields in one round-trip; nil for missing
+        // HMGET browser:{execution_id} field ... — nil for missing fields
         let fields: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(self.key(&["browser", id]))
-            .arg(&["execution_id", "host", "grpc_port", "state"])
+            .arg(self.key(&["browser", execution_id]))
+            .arg(&["browser_id", "host", "grpc_port", "state"])
             .query_async(&mut conn)
             .await?;
-
-        if let Some(info) = self.hydrate(id, fields).await? {
-            return Ok(Some(info));
-        }
-
-        // execution_id field was nil — id might be an execution_id, look up the browser_id
-        let Some(bid): Option<String> = conn.get(self.key(&["execution", id])).await? else {
-            return Ok(None);
-        };
-
-        let fields: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(self.key(&["browser", &bid]))
-            .arg(&["execution_id", "host", "grpc_port", "state"])
-            .query_async(&mut conn)
-            .await?;
-
-        self.hydrate(&bid, fields).await
+        self.hydrate(execution_id, fields).await
     }
 
     /// Builds a `BrowserInfo` from raw HMGET fields. Returns `None` if any required
-    /// connection field (execution_id, host, grpc_port) is absent — a partial record
-    /// is not a valid browser.
-    async fn hydrate(&self, browser_id: &str, fields: Vec<Option<String>>) -> Result<Option<BrowserInfo>, StorageError> {
-        let Some(execution_id) = fields[0].clone() else { return Ok(None); };
+    /// connection field is absent — a partial record is not a usable browser.
+    async fn hydrate(&self, execution_id: &str, fields: Vec<Option<String>>) -> Result<Option<BrowserInfo>, StorageError> {
+        let Some(browser_id) = fields[0].clone() else { return Ok(None); };
         let Some(host) = fields[1].clone() else { return Ok(None); };
         let Some(grpc_port) = fields[2].as_deref().and_then(|p| p.parse().ok()) else { return Ok(None); };
         let state = BrowserState::from_str(fields[3].as_deref().unwrap_or("idle"));
-        let contexts = self.list_contexts(browser_id).await.unwrap_or_default();
-        Ok(Some(BrowserInfo { browser_id: browser_id.to_string(), execution_id, host, grpc_port, state, contexts }))
+        let contexts = self.list_contexts(execution_id).await.unwrap_or_default();
+        Ok(Some(BrowserInfo { execution_id: execution_id.to_string(), browser_id, host, grpc_port, state, contexts }))
     }
 
     pub async fn list_browsers(&self) -> Result<Vec<BrowserInfo>, StorageError> {
         let mut conn = self.conn.clone();
-        // SMEMBERS browsers — all registered browser ids
+        // SMEMBERS browsers — all registered execution ids
         let ids: Vec<String> = conn.smembers(self.key(&["browsers"])).await?;
         let mut browsers = Vec::with_capacity(ids.len());
         for id in ids {
@@ -134,46 +111,42 @@ impl RedisStore {
         Ok(browsers)
     }
 
-    pub async fn update_browser_state(&self, browser_id: &str, state: &BrowserState) -> Result<(), StorageError> {
+    pub async fn update_browser_state(&self, execution_id: &str, state: &BrowserState) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
-        let _: () = conn.hset(self.key(&["browser", browser_id]), "state", state.as_str()).await?;
+        let _: () = conn.hset(self.key(&["browser", execution_id]), "state", state.as_str()).await?;
         Ok(())
     }
 
-    pub async fn remove_browser(&self, browser_id: &str) -> Result<(), StorageError> {
+    pub async fn remove_browser(&self, execution_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
-        let execution_id: Option<String> = conn
-            .hget(self.key(&["browser", browser_id]), "execution_id")
+        redis::pipe()
+            .srem(self.key(&["browsers"]), execution_id)
+            .del(self.key(&["browser", execution_id]))
+            .del(self.key(&["browser", execution_id, "contexts"]))
+            // Also evict from pending_agents in case the agent never registered
+            .zrem(self.key(&["pending_agents"]), execution_id)
+            .exec_async(&mut conn)
             .await?;
-        let mut pipe = redis::pipe();
-        pipe.srem(self.key(&["browsers"]), browser_id)
-            .del(self.key(&["browser", browser_id]))
-            .del(self.key(&["browser", browser_id, "contexts"]));
-        if let Some(eid) = &execution_id {
-            // DEL execution:{id} — clean up the reverse index
-            pipe.del(self.key(&["execution", eid]));
-        }
-        pipe.exec_async(&mut conn).await?;
         Ok(())
     }
 
     // --- Contexts ---
 
-    pub async fn add_context(&self, browser_id: &str, context_id: &str) -> Result<(), StorageError> {
+    pub async fn add_context(&self, execution_id: &str, context_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
-        let _: () = conn.sadd(self.key(&["browser", browser_id, "contexts"]), context_id).await?;
+        let _: () = conn.sadd(self.key(&["browser", execution_id, "contexts"]), context_id).await?;
         Ok(())
     }
 
-    pub async fn remove_context(&self, browser_id: &str, context_id: &str) -> Result<(), StorageError> {
+    pub async fn remove_context(&self, execution_id: &str, context_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
-        let _: () = conn.srem(self.key(&["browser", browser_id, "contexts"]), context_id).await?;
+        let _: () = conn.srem(self.key(&["browser", execution_id, "contexts"]), context_id).await?;
         Ok(())
     }
 
-    pub async fn list_contexts(&self, browser_id: &str) -> Result<Vec<String>, StorageError> {
+    pub async fn list_contexts(&self, execution_id: &str) -> Result<Vec<String>, StorageError> {
         let mut conn = self.conn.clone();
-        Ok(conn.smembers(self.key(&["browser", browser_id, "contexts"])).await?)
+        Ok(conn.smembers(self.key(&["browser", execution_id, "contexts"])).await?)
     }
 
     // --- TLS cert (cluster-wide) ---
@@ -215,7 +188,7 @@ impl RedisStore {
 
     pub async fn set_instruct_state(
         &self,
-        browser_id: &str,
+        execution_id: &str,
         status: &str,
         step: u32,
         max_steps: u32,
@@ -223,7 +196,7 @@ impl RedisStore {
         reasoning: &str,
     ) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
-        let _: () = conn.hset_multiple(self.key(&["instruct", browser_id]), &[
+        let _: () = conn.hset_multiple(self.key(&["instruct", execution_id]), &[
             ("status", status),
             ("current_step", &step.to_string()),
             ("max_steps", &max_steps.to_string()),
@@ -235,27 +208,27 @@ impl RedisStore {
 
     pub async fn get_instruct_state(
         &self,
-        browser_id: &str,
+        execution_id: &str,
     ) -> Result<Option<std::collections::HashMap<String, String>>, StorageError> {
         let mut conn = self.conn.clone();
-        let key = self.key(&["instruct", browser_id]);
+        let key = self.key(&["instruct", execution_id]);
         let exists: bool = conn.exists(&key).await?;
         if !exists { return Ok(None); }
         Ok(Some(conn.hgetall(&key).await?))
     }
 
-    pub async fn push_instruct_history(&self, browser_id: &str, message_json: &str) -> Result<(), StorageError> {
+    pub async fn push_instruct_history(&self, execution_id: &str, message_json: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         // RPUSH — append to the right end of the list, preserving chronological order
-        let _: () = conn.rpush(self.key(&["instruct", browser_id, "history"]), message_json).await?;
+        let _: () = conn.rpush(self.key(&["instruct", execution_id, "history"]), message_json).await?;
         Ok(())
     }
 
-    pub async fn clear_instruct(&self, browser_id: &str) -> Result<(), StorageError> {
+    pub async fn clear_instruct(&self, execution_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         redis::pipe()
-            .del(self.key(&["instruct", browser_id]))
-            .del(self.key(&["instruct", browser_id, "history"]))
+            .del(self.key(&["instruct", execution_id]))
+            .del(self.key(&["instruct", execution_id, "history"]))
             .exec_async(&mut conn)
             .await?;
         Ok(())

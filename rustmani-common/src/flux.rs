@@ -89,17 +89,12 @@ impl FluxClient {
 
     /// Spawns a browser agent via Flux asynchronously. Returns the execution_id assigned
     /// by Flux, which the agent will echo back on registration so the server can map it
-    /// to the correct browser_id.
-    /// `master_url` is passed to the agent as `RUSTMANI_MASTER_URL` so it knows
-    /// where to call back via gRPC to register itself.
-    pub async fn spawn_agent(&self, name: &str, master_url: &str, args: &[String]) -> Result<String, FluxError> {
+    /// to the correct browser_id. `args[0]` must be the master gRPC URL.
+    pub async fn spawn_agent(&self, name: &str, args: &[String]) -> Result<String, FluxError> {
         let resp = self.client
-            .post(format!("{}/execute-async/{name}", self.url))
+            .post(format!("{}/execute/{name}/async", self.url))
             .header("X-API-Key", &self.token)
-            .json(&serde_json::json!({
-                "args": args,
-                "env": { "RUSTMANI_MASTER_URL": master_url }
-            }))
+            .json(&serde_json::json!({ "args": args }))
             .send()
             .await?;
 
@@ -113,6 +108,23 @@ impl FluxClient {
             .await
             .map(|r| r.execution_id)
             .map_err(|e| FluxError::Parse(format!("Failed to parse execution_id: {e}")))
+    }
+
+    /// Fetches the stdout/stderr log for a specific execution.
+    pub async fn get_execution_logs(&self, execution_id: &str) -> Result<String, FluxError> {
+        let resp = self.client
+            .get(format!("{}/executions/{execution_id}/logs", self.url))
+            .header("X-API-Key", &self.token)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(FluxError::Http { status, body });
+        }
+
+        resp.text().await.map_err(|e| FluxError::Parse(e.to_string()))
     }
 
     pub async fn terminate_all_nodes(&self) -> Result<(), FluxError> {

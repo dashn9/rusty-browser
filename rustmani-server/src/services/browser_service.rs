@@ -25,16 +25,18 @@ impl BrowserService {
         Self { state }
     }
 
-    /// Spawns a new agent via Flux. Returns the execution_id — the agent generates its
-    /// own browser_id and registers back via POST /internal/agents/register.
+    /// Spawns a new agent via Flux. Returns the execution_id — the agent registers back
+    /// via gRPC with its browser_id and connection details.
     pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<String, AppError> {
-        let args: Vec<String> = identity.into_iter().map(|v| v.to_string()).collect();
         let master_url = format!(
             "https://{}:{}",
-            self.state.config.server.public_ip,
-            self.state.config.server.grpc_port,
+            self.state.public_ip,
+            self.state.config.server.grpc_port.expect("grpc_port resolved at startup"),
         );
-        let execution_id = self.state.flux.spawn_agent(&self.state.config.flux.function_name, &master_url, &args).await?;
+        // master_url is argv[1]; any identity args follow
+        let mut args = vec![master_url.clone()];
+        args.extend(identity.into_iter().map(|v| v.to_string()));
+        let execution_id = self.state.flux.spawn_agent(&self.state.config.flux.function_name, &args).await?;
         self.state.redis.store_pending_execution(&execution_id).await?;
         Ok(execution_id)
     }
@@ -43,59 +45,64 @@ impl BrowserService {
         Ok(self.state.redis.list_browsers().await?)
     }
 
-    pub async fn get_browser(&self, id: &str) -> Result<BrowserInfo, AppError> {
-        self.state.redis.get_browser(id).await?
-            .ok_or_else(|| AppError::Browser(BrowserError::NotFound(id.to_string())))
+    pub async fn get_browser(&self, execution_id: &str) -> Result<BrowserInfo, AppError> {
+        self.state.redis.get_browser(execution_id).await?
+            .ok_or_else(|| AppError::Browser(BrowserError::NotFound(execution_id.to_string())))
     }
 
-    pub async fn delete_browser(&self, id: &str) -> Result<(), AppError> {
-        self.exec(id, "", Action::CloseBrowser(CloseBrowser {})).await
+    pub async fn delete_browser(&self, execution_id: &str) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::CloseBrowser(CloseBrowser {})).await
             .or_else(|e| match e {
                 AppError::Browser(BrowserError::NotFound(_)) => Ok(()),
                 other => Err(other),
             })?;
-        self.state.redis.remove_browser(id).await?;
+        self.state.redis.remove_browser(execution_id).await?;
         Ok(())
     }
 
-    pub async fn create_context(&self, browser_id: &str) -> Result<String, AppError> {
+    pub async fn create_context(&self, execution_id: &str) -> Result<String, AppError> {
         let context_id = Uuid::new_v4().to_string();
-        self.exec(browser_id, &context_id, Action::CreateContext(CreateContext { url: None })).await?;
-        self.state.redis.add_context(browser_id, &context_id).await?;
+        self.exec(execution_id, &context_id, Action::CreateContext(CreateContext { url: None })).await?;
+        self.state.redis.add_context(execution_id, &context_id).await?;
         Ok(context_id)
     }
 
-    pub async fn delete_context(&self, browser_id: &str, ctx_id: &str) -> Result<(), AppError> {
-        self.exec(browser_id, ctx_id, Action::CloseContext(CloseContext { context_id: ctx_id.to_string() })).await?;
-        self.state.redis.remove_context(browser_id, ctx_id).await?;
+    pub async fn delete_context(&self, execution_id: &str, ctx_id: &str) -> Result<(), AppError> {
+        self.exec(execution_id, ctx_id, Action::CloseContext(CloseContext { context_id: ctx_id.to_string() })).await?;
+        self.state.redis.remove_context(execution_id, ctx_id).await?;
         Ok(())
     }
 
-    pub async fn navigate(&self, browser_id: &str, url: String, wait_until: Option<String>) -> Result<(), AppError> {
-        self.exec(browser_id, "", Action::Navigate(Navigate { url, wait_until: wait_until.unwrap_or_default() })).await
+    pub async fn navigate(&self, execution_id: &str, url: String, wait_until: Option<String>) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::Navigate(Navigate { url, wait_until: wait_until.unwrap_or_default() })).await
     }
 
-    pub async fn click(&self, browser_id: &str, x: f32, y: f32, human: bool) -> Result<(), AppError> {
-        self.exec(browser_id, "", Action::Click(Click { selector: None, x: Some(x), y: Some(y), human })).await
+    pub async fn click(&self, execution_id: &str, x: f32, y: f32, human: bool) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::Click(Click { selector: None, x: Some(x), y: Some(y), human })).await
     }
 
-    pub async fn type_text(&self, browser_id: &str, text: String, selector: Option<String>) -> Result<(), AppError> {
-        self.exec(browser_id, "", Action::TypeText(Type { text, selector })).await
+    pub async fn type_text(&self, execution_id: &str, text: String, selector: Option<String>) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::TypeText(Type { text, selector })).await
     }
 
-    pub async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, AppError> {
-        let result = self.exec_inner(browser_id, "", Action::Screenshot(Screenshot {
+    pub async fn screenshot(&self, execution_id: &str) -> Result<Option<Vec<u8>>, AppError> {
+        let result = self.exec_inner(execution_id, "", Action::Screenshot(Screenshot {
             quality: self.state.config.ai.resolution.quality,
             format: self.state.config.ai.resolution.format.clone(),
         })).await?;
         Ok(result.screenshot.map(|s| s.data))
     }
 
-    pub async fn eval_js(&self, browser_id: &str, script: String) -> Result<(), AppError> {
-        self.exec(browser_id, "", Action::EvalJs(EvalJs { script })).await
+    pub async fn eval_js(&self, execution_id: &str, script: String) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::EvalJs(EvalJs { script })).await
     }
 
-    pub async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), AppError> {
+    pub async fn get_execution_logs(&self, execution_id: &str) -> Result<String, AppError> {
+        self.state.flux.get_execution_logs(execution_id).await
+            .map_err(|e| AppError::Internal(format!("Flux logs: {e}")))
+    }
+
+    pub async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<(), AppError> {
         let proto_action = match action {
             BrowserAction::Navigate { url } => Action::Navigate(
                 Navigate { url: url.clone(), wait_until: "complete".to_string() },
@@ -118,18 +125,19 @@ impl BrowserService {
             }
             BrowserAction::Screenshot | BrowserAction::Done { .. } => return Ok(()),
         };
-        self.exec(browser_id, "", proto_action).await
+        self.exec(execution_id, "", proto_action).await
     }
 
-    async fn exec(&self, browser_id: &str, context_id: &str, action: Action) -> Result<(), AppError> {
-        self.exec_inner(browser_id, context_id, action).await.map(|_| ())
+    async fn exec(&self, execution_id: &str, context_id: &str, action: Action) -> Result<(), AppError> {
+        self.exec_inner(execution_id, context_id, action).await.map(|_| ())
     }
 
-    async fn exec_inner(&self, browser_id: &str, context_id: &str, action: Action) -> Result<CommandResult, AppError> {
-        let browser = self.get_browser(browser_id).await?;
+    async fn exec_inner(&self, execution_id: &str, context_id: &str, action: Action) -> Result<CommandResult, AppError> {
+        let browser = self.get_browser(execution_id).await?;
         self.connect(&browser).await?
             .execute(tonic::Request::new(BrowserCommand {
-                browser_id: browser_id.to_string(),
+                // browser_id identifies the browser on the agent side
+                browser_id: browser.browser_id.clone(),
                 context_id: context_id.to_string(),
                 action: Some(action),
             }))
@@ -164,11 +172,11 @@ impl AIInstructor for BrowserService {
         &self.state
     }
 
-    async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, AppError> {
-        BrowserService::screenshot(self, browser_id).await
+    async fn screenshot(&self, execution_id: &str) -> Result<Option<Vec<u8>>, AppError> {
+        BrowserService::screenshot(self, execution_id).await
     }
 
-    async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), AppError> {
-        BrowserService::dispatch(self, browser_id, action).await
+    async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<(), AppError> {
+        BrowserService::dispatch(self, execution_id, action).await
     }
 }

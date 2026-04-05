@@ -33,34 +33,34 @@ pub async fn list_browsers(State(state): State<Arc<AppState>>) -> Result<Json<se
 
 pub async fn get_browser(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let browser = svc(&state).get_browser(&id).await?;
+    let browser = svc(&state).get_browser(&execution_id).await?;
     Ok(Json(serde_json::json!(browser)))
 }
 
 pub async fn delete_browser(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).delete_browser(&id).await?;
-    Ok(Json(serde_json::json!({ "deleted": id })))
+    svc(&state).delete_browser(&execution_id).await?;
+    Ok(Json(serde_json::json!({ "deleted": execution_id})))
 }
 
 pub async fn create_context(
     State(state): State<Arc<AppState>>,
-    Path(browser_id): Path<String>,
+    Path(execution_id): Path<String>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    let context_id = svc(&state).create_context(&browser_id).await?;
-    Ok((StatusCode::CREATED, Json(serde_json::json!({ "browser_id": browser_id, "context_id": context_id }))))
+    let context_id = svc(&state).create_context(&execution_id).await?;
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "execution_id": execution_id, "context_id": context_id }))))
 }
 
 pub async fn delete_context(
     State(state): State<Arc<AppState>>,
-    Path((browser_id, ctx_id)): Path<(String, String)>,
+    Path((execution_id, ctx_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).delete_context(&browser_id, &ctx_id).await?;
-    Ok(Json(serde_json::json!({ "deleted_context": ctx_id, "browser_id": browser_id })))
+    svc(&state).delete_context(&execution_id, &ctx_id).await?;
+    Ok(Json(serde_json::json!({ "deleted_context": ctx_id, "execution_id": execution_id })))
 }
 
 #[derive(Deserialize)]
@@ -71,10 +71,10 @@ pub struct NavigateRequest {
 
 pub async fn navigate(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
     Json(req): Json<NavigateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).navigate(&id, req.url, req.wait_until).await?;
+    svc(&state).navigate(&execution_id, req.url, req.wait_until).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -87,10 +87,10 @@ pub struct ClickRequest {
 
 pub async fn click(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
     Json(req): Json<ClickRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).click(&id, req.x, req.y, req.human.unwrap_or(true)).await?;
+    svc(&state).click(&execution_id, req.x, req.y, req.human.unwrap_or(true)).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -102,18 +102,18 @@ pub struct TypeRequest {
 
 pub async fn type_text(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
     Json(req): Json<TypeRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).type_text(&id, req.text, req.selector).await?;
+    svc(&state).type_text(&execution_id, req.text, req.selector).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 pub async fn screenshot(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let data = svc(&state).screenshot(&id).await?
+    let data = svc(&state).screenshot(&execution_id).await?
         .map(|d| base64::engine::general_purpose::STANDARD.encode(&d));
     Ok(Json(serde_json::json!({ "data": data })))
 }
@@ -125,10 +125,10 @@ pub struct EvalRequest {
 
 pub async fn eval_js(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
     Json(req): Json<EvalRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).eval_js(&id, req.script).await?;
+    svc(&state).eval_js(&execution_id, req.script).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -139,9 +139,17 @@ pub struct InstructRequest {
 
 pub async fn instruct(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(execution_id): Path<String>,
     Json(req): Json<InstructRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).instruct(&id, &req.instruction).await?;
-    Ok(Json(serde_json::json!({ "browser_id": id, "status": "completed" })))
+    svc(&state).instruct(&execution_id, &req.instruction).await?;
+    Ok(Json(serde_json::json!({ "execution_id": execution_id, "status": "completed" })))
+}
+
+pub async fn get_execution_logs(
+    State(state): State<Arc<AppState>>,
+    Path(execution_id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let logs = svc(&state).get_execution_logs(&execution_id).await?;
+    Ok(Json(serde_json::json!({ "logs": logs })))
 }

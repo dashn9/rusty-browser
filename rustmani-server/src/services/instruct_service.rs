@@ -11,12 +11,12 @@ use crate::AppState;
 pub trait AIInstructor: Send + Sync {
     fn state(&self) -> &Arc<AppState>;
 
-    async fn screenshot(&self, browser_id: &str) -> Result<Option<Vec<u8>>, AppError>;
+    async fn screenshot(&self, execution_id: &str) -> Result<Option<Vec<u8>>, AppError>;
 
-    async fn dispatch(&self, browser_id: &str, action: &BrowserAction) -> Result<(), AppError>;
+    async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<(), AppError>;
 
-    async fn instruct(&self, browser_id: &str, instruction: &str) -> Result<(), AppError> {
-        let raw = self.screenshot(browser_id).await?
+    async fn instruct(&self, execution_id: &str, instruction: &str) -> Result<(), AppError> {
+        let raw = self.screenshot(execution_id).await?
             .ok_or_else(|| AppError::Internal("No screenshot data".into()))?;
 
         let processed = downscale(
@@ -32,7 +32,7 @@ pub trait AIInstructor: Send + Sync {
             .map_err(AppError::AI)?;
 
         for action in &ai_response {
-            self.dispatch(browser_id, action).await?;
+            self.dispatch(execution_id, action).await?;
         }
 
         Ok(())

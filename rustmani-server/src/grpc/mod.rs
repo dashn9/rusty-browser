@@ -41,7 +41,7 @@ impl Master for MasterService {
 
         info!("Agent connected: browser={} execution={} addr={}:{}", req.browser_id, req.execution_id, req.host, req.grpc_port);
 
-        let browser_id = req.browser_id.clone();
+        let execution_id = req.execution_id.clone();
         let state = self.state.clone();
 
         let output = stream! {
@@ -52,14 +52,15 @@ impl Master for MasterService {
             }
         };
 
-        // Clean up browser record when the stream ends (agent disconnected)
+        // Clean up browser record when the stream ends (agent disconnected).
+        // Redis is keyed by execution_id; browser_id is stored metadata only.
         let cleanup = {
             let state = state.clone();
-            let browser_id = browser_id.clone();
+            let execution_id = execution_id.clone();
             async move {
-                warn!("Agent disconnected: browser={browser_id}");
-                if let Err(e) = state.redis.remove_browser(&browser_id).await {
-                    warn!("Cleanup failed for browser {browser_id}: {e}");
+                warn!("Agent disconnected: execution={execution_id}");
+                if let Err(e) = state.redis.remove_browser(&execution_id).await {
+                    warn!("Cleanup failed for execution {execution_id}: {e}");
                 }
             }
         };

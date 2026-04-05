@@ -29,11 +29,12 @@ pub struct BrowserConfig {
 pub struct ServerConfig {
     #[serde(default = "default_http_port")]
     pub http_port: u16,
+    pub grpc_port: u16,
+    /// Public IP or hostname reachable from Flux nodes — passed to agents at spawn time.
+    pub public_ip: String,
 }
 
-fn default_http_port() -> u16 {
-    8080
-}
+fn default_http_port() -> u16 { 8080 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RedisConfig {

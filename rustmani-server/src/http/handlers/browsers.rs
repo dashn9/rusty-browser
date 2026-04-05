@@ -22,8 +22,8 @@ pub async fn create_browser(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateBrowserRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    let browser = svc(&state).create_browser(req.identity).await?;
-    Ok((StatusCode::CREATED, Json(serde_json::json!({ "browser_id": browser.browser_id }))))
+    let execution_id = svc(&state).create_browser(req.identity).await?;
+    Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "execution_id": execution_id }))))
 }
 
 pub async fn list_browsers(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, AppError> {

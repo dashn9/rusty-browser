@@ -2,19 +2,17 @@ use reqwest::Client;
 use serde::Deserialize;
 
 use crate::error::FluxError;
-use crate::state::BrowserInfo;
+
+#[derive(Debug, Deserialize)]
+struct SpawnResponse {
+    execution_id: String,
+}
 
 #[derive(Clone)]
 pub struct FluxClient {
     client: Client,
     url: String,
     token: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct FluxResponse {
-    output: String,
-    error: Option<String>,
 }
 
 impl FluxClient {
@@ -89,35 +87,32 @@ impl FluxClient {
         Ok(())
     }
 
-    /// Spawns a browser agent via Flux. Returns BrowserInfo (browser_id, host, grpc_port)
-    /// parsed from the function's stdout output.
-    pub async fn execute_function(&self, name: &str, browser_id: &str, args: &[String]) -> Result<BrowserInfo, FluxError> {
-        let mut full_args = vec!["--browser-id".to_string(), browser_id.to_string()];
-        full_args.extend_from_slice(args);
+    /// Spawns a browser agent via Flux asynchronously. Returns the execution_id assigned
+    /// by Flux, which the agent will echo back on registration so the server can map it
+    /// to the correct browser_id.
+    /// `master_url` is passed to the agent as `RUSTMANI_MASTER_URL` so it knows
+    /// where to call back via gRPC to register itself.
+    pub async fn spawn_agent(&self, name: &str, master_url: &str, args: &[String]) -> Result<String, FluxError> {
         let resp = self.client
-            .post(format!("{}/execute/{name}", self.url))
+            .post(format!("{}/execute-async/{name}", self.url))
             .header("X-API-Key", &self.token)
-            .json(&serde_json::json!({ "args": full_args }))
+            .json(&serde_json::json!({
+                "args": args,
+                "env": { "RUSTMANI_MASTER_URL": master_url }
+            }))
             .send()
             .await?;
 
-        let status = resp.status();
-        if !status.is_success() {
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
-            return Err(FluxError::Http { status: status.as_u16(), body });
+            return Err(FluxError::Http { status, body });
         }
 
-        let flux_resp: FluxResponse = resp.json().await
-            .map_err(|e| FluxError::Parse(e.to_string()))?;
-
-        if let Some(err) = flux_resp.error {
-            if !err.is_empty() {
-                return Err(FluxError::Execution(err));
-            }
-        }
-
-        serde_json::from_str::<BrowserInfo>(&flux_resp.output)
-            .map_err(|e| FluxError::Parse(format!("Failed to parse agent info: {e}")))
+        resp.json::<SpawnResponse>()
+            .await
+            .map(|r| r.execution_id)
+            .map_err(|e| FluxError::Parse(format!("Failed to parse execution_id: {e}")))
     }
 
     pub async fn terminate_all_nodes(&self) -> Result<(), FluxError> {

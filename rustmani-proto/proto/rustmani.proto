@@ -6,6 +6,24 @@ service BrowserAgent {
   rpc Execute(BrowserCommand) returns (CommandResult);
 }
 
+// Agent calls master on startup to store connection info and signal liveness.
+// Server streams back keep-alives; stream close = agent gone.
+service Master {
+  rpc Register(RegisterAgentRequest) returns (stream ConnectEvent);
+}
+
+message RegisterAgentRequest {
+  string execution_id = 1;
+  string browser_id   = 2;
+  string host         = 3;
+  uint32 grpc_port    = 4;
+}
+
+// Heartbeat from server. terminate=true means server wants agent to shut down.
+message ConnectEvent {
+  bool terminate = 1;
+}
+
 message CommandResult {
   bool success = 1;
   string error_message = 2;

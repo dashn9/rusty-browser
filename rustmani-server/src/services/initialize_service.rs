@@ -69,10 +69,16 @@ impl InitializeService {
         let proxy_file = &self.state.config.proxy_file;
         let tls_cert_tmp = write_temp(TLS_CERT_FILENAME, cert_pem.as_bytes())?;
         let tls_key_tmp  = write_temp(TLS_KEY_FILENAME,  key_pem.as_bytes())?;
+
+        let (master_cert_pem, _) = self.state.redis.get_master_tls_cert().await?
+            .ok_or_else(|| AppError::Internal("Master TLS cert not found — server may not have started correctly".into()))?;
+        let master_cert_tmp = write_temp("master.crt", master_cert_pem.as_bytes())?;
+
         let zip_bytes = create_zip(filename, &agent_bytes, &[
             proxy_file.as_str(),
             &tls_cert_tmp,
             &tls_key_tmp,
+            &master_cert_tmp,
         ])?;
 
         info!("Uploading '{filename}.zip' to Flux as function '{function_name}'…");

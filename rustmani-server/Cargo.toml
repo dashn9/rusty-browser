@@ -34,6 +34,8 @@ async-trait = "0.1"
 serde_yaml = "0.9"
 zip = "2"
 futures = "0.3"
+async-stream = "0.3"
+tokio-stream = "0.1"
 
 [package.metadata.deb]
 name = "rustmani-server"

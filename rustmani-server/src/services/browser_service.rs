@@ -25,12 +25,18 @@ impl BrowserService {
         Self { state }
     }
 
-    pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<BrowserInfo, AppError> {
-        let browser_id = Uuid::new_v4().to_string();
-        let args: Vec<String> = identity.into_iter().map(|id| id.to_string()).collect();
-        let browser = self.state.flux.execute_function(&self.state.config.flux.function_name, &browser_id, &args).await?;
-        self.state.redis.add_browser(&browser).await?;
-        Ok(browser)
+    /// Spawns a new agent via Flux. Returns the execution_id — the agent generates its
+    /// own browser_id and registers back via POST /internal/agents/register.
+    pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<String, AppError> {
+        let args: Vec<String> = identity.into_iter().map(|v| v.to_string()).collect();
+        let master_url = format!(
+            "https://{}:{}",
+            self.state.config.server.public_ip,
+            self.state.config.server.grpc_port,
+        );
+        let execution_id = self.state.flux.spawn_agent(&self.state.config.flux.function_name, &master_url, &args).await?;
+        self.state.redis.store_pending_execution(&execution_id).await?;
+        Ok(execution_id)
     }
 
     pub async fn list_browsers(&self) -> Result<Vec<BrowserInfo>, AppError> {

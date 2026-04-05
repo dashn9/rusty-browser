@@ -1,16 +1,10 @@
-use clap::Parser;
 use tracing::info;
+use uuid::Uuid;
 
 mod browser;
 mod error;
 mod executor;
 mod server;
-
-#[derive(Parser)]
-struct Args {
-    #[arg(long)]
-    browser_id: String,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,16 +15,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let args = Args::parse();
-    let browser_id = args.browser_id;
+    let execution_id = std::env::var("FLUX_EXECUTION_ID")
+        .expect("FLUX_EXECUTION_ID must be set by Flux");
 
+    let master_url = std::env::var("RUSTMANI_MASTER_URL")
+        .expect("RUSTMANI_MASTER_URL must be set");
+
+    let browser_id = Uuid::new_v4().to_string();
     let browser_config = browser::ChromeBrowserLaunchConfig::from_env().unwrap_or_default();
 
-    info!("Starting rustmani-agent {browser_id}");
+    info!("Starting rustmani-agent browser={browser_id} execution={execution_id}");
 
     let browser = browser::ManagedBrowser::launch(browser_config).await?;
 
-    server::serve(browser, &browser_id).await?;
+    server::serve(browser, &browser_id, &execution_id, &master_url).await?;
 
     Ok(())
 }

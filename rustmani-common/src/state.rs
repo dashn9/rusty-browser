@@ -29,6 +29,7 @@ impl BrowserState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserInfo {
     pub browser_id: String,
+    pub execution_id: String,
     pub host: String,
     pub grpc_port: u16,
     pub state: BrowserState,

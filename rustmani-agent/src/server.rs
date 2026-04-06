@@ -30,7 +30,7 @@ impl BrowserAgent for BrowserAgentService {
         let result = executor::execute(&mut *browser, cmd).await.unwrap_or_else(|e| CommandResult {
             success: false,
             error_message: e.to_string(),
-            screenshot: None,
+            result: String::new(),
         });
         Ok(Response::new(result))
     }
@@ -81,25 +81,7 @@ pub async fn serve(
         let mut client = MasterClient::new(channel);
         info!("Connecting to master, registering browser={browser_id_owned}");
         match client.register(Request::new(registration)).await {
-            Ok(stream) => {
-                use tokio_stream::StreamExt;
-                let mut stream = stream.into_inner();
-                while let Some(event) = stream.next().await {
-                    match event {
-                        Ok(e) if e.terminate => {
-                            info!("Master requested termination, shutting down");
-                            std::process::exit(0);
-                        }
-                        Err(e) => {
-                            tracing::warn!("Master stream error: {e}");
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-                info!("Master stream closed, shutting down");
-                std::process::exit(0);
-            }
+            Ok(_) => info!("Registered with master"),
             Err(e) => tracing::error!("Failed to register with master: {e}"),
         }
     });

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use uuid::Uuid;
+use base64::Engine;
 
 use rustmani_common::ai::BrowserAction;
 use rustmani_common::error::BrowserError;
@@ -61,8 +61,8 @@ impl BrowserService {
     }
 
     pub async fn create_context(&self, execution_id: &str) -> Result<String, AppError> {
-        let context_id = Uuid::new_v4().to_string();
-        self.exec(execution_id, &context_id, Action::CreateContext(CreateContext { url: None })).await?;
+        let r = self.exec_inner(execution_id, "", Action::CreateContext(CreateContext { url: None })).await?;
+        let context_id = r.result;
         self.state.redis.add_context(execution_id, &context_id).await?;
         Ok(context_id)
     }
@@ -78,23 +78,49 @@ impl BrowserService {
     }
 
     pub async fn click(&self, execution_id: &str, x: f32, y: f32, human: bool) -> Result<(), AppError> {
-        self.exec(execution_id, "", Action::Click(Click { selector: None, x: Some(x), y: Some(y), human })).await
+        self.exec(execution_id, "", Action::Click(Click { x: Some(x), y: Some(y), human })).await
     }
 
     pub async fn type_text(&self, execution_id: &str, text: String, selector: Option<String>) -> Result<(), AppError> {
         self.exec(execution_id, "", Action::TypeText(Type { text, selector })).await
     }
 
-    pub async fn screenshot(&self, execution_id: &str) -> Result<Option<Vec<u8>>, AppError> {
-        let result = self.exec_inner(execution_id, "", Action::Screenshot(Screenshot {
+    pub async fn screenshot(&self, execution_id: &str) -> Result<String, AppError> {
+        let cmd_result = self.exec_inner(execution_id, "", Action::Screenshot(Screenshot {
             quality: self.state.config.ai.resolution.quality,
             format: self.state.config.ai.resolution.format.clone(),
         })).await?;
-        Ok(result.screenshot.map(|s| s.data))
+        if cmd_result.result.is_empty() {
+            return Err(AppError::Internal("agent returned empty screenshot".into()));
+        }
+        Ok(cmd_result.result)
     }
 
-    pub async fn eval_js(&self, execution_id: &str, script: String) -> Result<(), AppError> {
-        self.exec(execution_id, "", Action::EvalJs(EvalJs { script })).await
+    pub async fn node_click(&self, execution_id: &str, selector: String, human: bool) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::NodeClick(NodeClick { selector, human })).await
+    }
+
+    pub async fn fetch_html(&self, execution_id: &str, selector: Option<String>) -> Result<String, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::FetchHtml(FetchHtml { selector })).await?;
+        Ok(r.result)
+    }
+
+    pub async fn fetch_text(&self, execution_id: &str, selector: String) -> Result<String, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::FetchText(FetchText { selector })).await?;
+        Ok(r.result)
+    }
+
+    pub async fn eval_js(&self, execution_id: &str, script: String) -> Result<String, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::EvalJs(EvalJs { script })).await?;
+        Ok(r.result)
+    }
+
+    pub async fn scroll_by(&self, execution_id: &str, y: i32, human: bool) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::ScrollBy(ScrollBy { y, human })).await
+    }
+
+    pub async fn scroll_to(&self, execution_id: &str, selector: String, human: bool, to: u32) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::ScrollTo(ScrollTo { selector, human, to })).await
     }
 
     pub async fn get_execution_logs(&self, execution_id: &str) -> Result<String, AppError> {
@@ -108,16 +134,40 @@ impl BrowserService {
                 Navigate { url: url.clone(), wait_until: "complete".to_string() },
             ),
             BrowserAction::Click { x, y, human } => Action::Click(
-                Click { selector: None, x: Some(*x), y: Some(*y), human: *human },
+                Click { x: Some(*x), y: Some(*y), human: *human },
+            ),
+            BrowserAction::NodeClick { selector, human } => Action::NodeClick(
+                NodeClick { selector: selector.clone(), human: *human },
             ),
             BrowserAction::Type { text, selector } => Action::TypeText(
                 Type { text: text.clone(), selector: selector.clone() },
             ),
-            BrowserAction::MouseMove { x, y } => Action::HumanMouseMove(
-                HumanMouseMove { selector: None, x: Some(*x), y: Some(*y) },
+            BrowserAction::MouseMove { x, y } => Action::MouseMove(
+                MouseMove { x: Some(*x), y: Some(*y), steps: 0 },
             ),
-            BrowserAction::Scroll { delta_x, delta_y } => Action::Scroll(
-                Scroll { delta_x: *delta_x, delta_y: *delta_y },
+            BrowserAction::HumanMouseMove { x, y } => Action::HumanMouseMove(
+                HumanMouseMove { x: Some(*x), y: Some(*y) },
+            ),
+            BrowserAction::ScrollBy { y, human } => Action::ScrollBy(
+                ScrollBy { y: *y, human: *human },
+            ),
+            BrowserAction::ScrollTo { selector, human } => Action::ScrollTo(
+                ScrollTo { selector: selector.clone(), human: *human, to: 0 },
+            ),
+            BrowserAction::FetchHtml { selector } => Action::FetchHtml(
+                FetchHtml { selector: selector.clone() },
+            ),
+            BrowserAction::FetchText { selector } => Action::FetchText(
+                FetchText { selector: selector.clone() },
+            ),
+            BrowserAction::EvalJs { script } => Action::EvalJs(
+                EvalJs { script: script.clone() },
+            ),
+            BrowserAction::FindNode { selector } => Action::FindNode(
+                FindNode { selector: selector.clone() },
+            ),
+            BrowserAction::WaitForNode { selector, timeout_ms } => Action::WaitForNode(
+                WaitForNode { selector: selector.clone(), timeout_ms: *timeout_ms },
             ),
             BrowserAction::Wait { ms } => {
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
@@ -173,7 +223,11 @@ impl AIInstructor for BrowserService {
     }
 
     async fn screenshot(&self, execution_id: &str) -> Result<Option<Vec<u8>>, AppError> {
-        BrowserService::screenshot(self, execution_id).await
+        let b64 = BrowserService::screenshot(self, execution_id).await?;
+        base64::engine::general_purpose::STANDARD
+            .decode(&b64)
+            .map(Some)
+            .map_err(|e| AppError::Internal(format!("Screenshot decode: {e}")))
     }
 
     async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<(), AppError> {

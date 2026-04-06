@@ -145,7 +145,7 @@ fn build_function_yaml(
         name: name.to_string(),
         handler: name.to_string(),
         resources: Resources { cpu: 1, memory: 2048 },
-        timeout: 30,
+        timeout: 0,
         max_concurrency: 200,
         max_concurrency_behaviour: "wait".to_string(),
         resource_pressure_behavior: "wait".to_string(),

@@ -26,7 +26,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/browsers/{execution_id}/type/", post(browsers::type_text))
         .route("/browsers/{execution_id}/screenshot/", post(browsers::screenshot))
         .route("/browsers/{execution_id}/eval/", post(browsers::eval_js))
+        .route("/browsers/{execution_id}/scroll-by/", post(browsers::scroll_by))
+        .route("/browsers/{execution_id}/scroll-to/", post(browsers::scroll_to))
         .route("/browsers/{execution_id}/instruct/", post(browsers::instruct))
+        .route("/browsers/{execution_id}/node-click/", post(browsers::node_click))
+        .route("/browsers/{execution_id}/fetch-html/", post(browsers::fetch_html))
+        .route("/browsers/{execution_id}/fetch-text/", post(browsers::fetch_text))
         .route("/browsers/{execution_id}/logs/", get(browsers::get_execution_logs))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

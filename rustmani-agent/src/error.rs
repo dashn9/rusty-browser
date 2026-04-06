@@ -34,6 +34,8 @@ pub enum BrowserError {
     Context(String),
     #[error("close failed: {0}")]
     Close(String),
+    #[error("action failed: {0}")]
+    Action(String),
 }
 
 #[derive(Debug, Error)]

@@ -13,7 +13,11 @@ pub struct RedisStore {
 impl RedisStore {
     pub async fn new(url: &str, prefix: &str) -> Result<Self, StorageError> {
         let client = redis::Client::open(url)?;
-        let conn = client.get_connection_manager().await?;
+        let config = redis::aio::ConnectionManagerConfig::new()
+            .set_connection_timeout(Some(std::time::Duration::from_secs(5)))
+            .set_response_timeout(Some(std::time::Duration::from_secs(5)))
+            .set_number_of_retries(3);
+        let conn = client.get_connection_manager_with_config(config).await?;
         Ok(Self { conn, prefix: prefix.to_string() })
     }
 
@@ -119,11 +123,12 @@ impl RedisStore {
 
     pub async fn remove_browser(&self, execution_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
+        // SREM/DEL/ZREM all return 0 (not an error) when the key or member is absent,
+        // so this is safe to call even if the browser was never registered.
         redis::pipe()
             .srem(self.key(&["browsers"]), execution_id)
             .del(self.key(&["browser", execution_id]))
             .del(self.key(&["browser", execution_id, "contexts"]))
-            // Also evict from pending_agents in case the agent never registered
             .zrem(self.key(&["pending_agents"]), execution_id)
             .exec_async(&mut conn)
             .await?;

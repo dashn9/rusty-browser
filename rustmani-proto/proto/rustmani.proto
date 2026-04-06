@@ -6,10 +6,9 @@ service BrowserAgent {
   rpc Execute(BrowserCommand) returns (CommandResult);
 }
 
-// Agent calls master on startup to store connection info and signal liveness.
-// Server streams back keep-alives; stream close = agent gone.
+// Agent calls master on startup to store connection info.
 service Master {
-  rpc Register(RegisterAgentRequest) returns (stream ConnectEvent);
+  rpc Register(RegisterAgentRequest) returns (RegisterResponse);
 }
 
 message RegisterAgentRequest {
@@ -19,21 +18,14 @@ message RegisterAgentRequest {
   uint32 grpc_port    = 4;
 }
 
-// Heartbeat from server. terminate=true means server wants agent to shut down.
-message ConnectEvent {
-  bool terminate = 1;
+message RegisterResponse {
+  bool ok = 1;
 }
 
 message CommandResult {
   bool success = 1;
   string error_message = 2;
-  optional ScreenshotData screenshot = 3;
-}
-
-message ScreenshotData {
-  bytes data = 1;
-  uint32 width = 2;
-  uint32 height = 3;
+  string result = 3;
 }
 
 message BrowserCommand {
@@ -42,27 +34,22 @@ message BrowserCommand {
   oneof action {
     Navigate navigate = 11;
     Click click = 12;
-    Type type_text = 13;
-    MouseMove mouse_move = 14;
-    HumanMouseMove human_mouse_move = 15;
-    CreateContext create_context = 16;
-    CloseContext close_context = 17;
-    CloseBrowser close_browser = 18;
-    EvalJs eval_js = 19;
-    FindNode find_node = 20;
-    WaitForNode wait_for_node = 21;
+    NodeClick node_click = 13;
+    Type type_text = 14;
+    MouseMove mouse_move = 15;
+    HumanMouseMove human_mouse_move = 16;
+    CreateContext create_context = 17;
+    CloseContext close_context = 18;
+    CloseBrowser close_browser = 19;
+    EvalJs eval_js = 20;
+    FindNode find_node = 21;
+    WaitForNode wait_for_node = 22;
     Screenshot screenshot = 23;
-    Scroll scroll = 24;
+    ScrollBy scroll_by = 24;
+    ScrollTo scroll_to = 25;
+    FetchHtml fetch_html = 26;
+    FetchText fetch_text = 27;
   }
-}
-
-message CreateContext {
-  optional string url = 1;
-}
-
-message Screenshot {
-  uint32 quality = 1;
-  string format = 2;
 }
 
 message Navigate {
@@ -71,10 +58,14 @@ message Navigate {
 }
 
 message Click {
-  optional string selector = 1;
-  optional float x = 2;
-  optional float y = 3;
-  bool human = 4;
+  optional float x = 1;
+  optional float y = 2;
+  bool human = 3;
+}
+
+message NodeClick {
+  string selector = 1;
+  bool human = 2;
 }
 
 message Type {
@@ -82,19 +73,19 @@ message Type {
   optional string selector = 2;
 }
 
-// Moves to selector instead if present
 message MouseMove {
   optional float x = 1;
   optional float y = 2;
   uint32 steps = 3;
-  optional string selector = 4;
 }
 
-// Moves to selector instead if present
 message HumanMouseMove {
-  optional string selector = 1;
-  optional float x = 2;
-  optional float y = 3;
+  optional float x = 1;
+  optional float y = 2;
+}
+
+message CreateContext {
+  optional string url = 1;
 }
 
 message CloseContext {
@@ -116,7 +107,26 @@ message WaitForNode {
   uint64 timeout_ms = 2;
 }
 
-message Scroll {
-  float delta_x = 1;
-  float delta_y = 2;
+message Screenshot {
+  uint32 quality = 1;
+  string format = 2;
+}
+
+message ScrollBy {
+  int32 y = 1;
+  bool human = 2;
+}
+
+message ScrollTo {
+  string selector = 1;
+  bool human = 2;
+  uint32 to = 3; // 0 = top of element at viewport top, 100 = bottom of element at viewport bottom
+}
+
+message FetchHtml {
+  optional string selector = 1;
+}
+
+message FetchText {
+  string selector = 1;
 }

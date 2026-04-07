@@ -38,7 +38,7 @@ impl BrowserService {
         // master_url is argv[1]; any identity args follow
         let mut args = vec![master_url.clone()];
         if self.state.config.server.grpc_server_url.is_some() {
-            args.push("--native-tls".to_string());
+            args.push("--no-master-tls".to_string());
         }
         args.extend(identity.into_iter().map(|v| v.to_string()));
         let execution_id = self.state.flux.spawn_agent(&self.state.config.flux.function_name, &args).await?;

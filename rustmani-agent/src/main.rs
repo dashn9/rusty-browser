@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // master_url is passed as the first positional arg by the server at spawn time
     let master_url = args.get(1).cloned()
         .expect("master_url must be passed as the first argument");
-    let native_tls = args.contains(&"--native-tls".to_string());
+    let no_master_tls = args.contains(&"--no-master-tls".to_string());
 
     let browser_id = Uuid::new_v4().to_string();
     let browser_config = browser::ChromeBrowserLaunchConfig::from_env().unwrap_or_default();
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let browser = browser::ManagedBrowser::launch(browser_config).await?;
 
-    server::serve(browser, &browser_id, &execution_id, &master_url, native_tls).await?;
+    server::serve(browser, &browser_id, &execution_id, &master_url, no_master_tls).await?;
 
     Ok(())
 }

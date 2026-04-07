@@ -41,7 +41,7 @@ pub async fn serve(
     browser_id: &str,
     execution_id: &str,
     master_url: &str,
-    native_tls: bool,
+    no_master_tls: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cert = std::fs::read_to_string("agent.crt")
         .map_err(|e| TlsError::CertRead(e.to_string()))?;
@@ -64,28 +64,29 @@ pub async fn serve(
         private_ip: private_ip.clone(),
         grpc_port: grpc_port as u32,
     };
-    let master = master_url.to_string();
     let browser_id_owned = browser_id.to_string();
-    let master_cert = if native_tls {
-        None
+    let (master, master_cert) = if no_master_tls {
+        // ngrok terminates TLS — connect via h2c (plain HTTP/2), no cert needed
+        let url = master_url.replacen("https://", "http://", 1);
+        (url, None)
     } else {
-        Some(std::fs::read_to_string("master.crt")
-            .map_err(|e| TlsError::CertRead(format!("master.crt: {e}")))?)
+        let cert = std::fs::read_to_string("master.crt")
+            .map_err(|e| TlsError::CertRead(format!("master.crt: {e}")))?;
+        (master_url.to_string(), Some(cert))
     };
 
     tokio::spawn(async move {
-        let mut tls = tonic::transport::ClientTlsConfig::new();
-        if let Some(cert) = master_cert {
-            tls = tls
+        let endpoint = tonic::transport::Channel::from_shared(master)
+            .expect("valid master URL");
+
+        let channel = if let Some(cert) = master_cert {
+            let tls = tonic::transport::ClientTlsConfig::new()
                 .ca_certificate(tonic::transport::Certificate::from_pem(&cert))
                 .domain_name("rustmani-master");
-        }
-
-        let channel = tonic::transport::Channel::from_shared(master)
-            .expect("valid master URL")
-            .tls_config(tls)
-            .expect("master TLS config")
-            .connect_lazy();
+            endpoint.tls_config(tls).expect("master TLS config").connect_lazy()
+        } else {
+            endpoint.connect_lazy()
+        };
 
         let mut client = MasterClient::new(channel);
         info!("Connecting to master, registering browser={browser_id_owned}");

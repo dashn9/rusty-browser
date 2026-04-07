@@ -86,7 +86,8 @@ impl RedisStore {
             // HMSET browser:{execution_id} — all fields in one round-trip
             .hset_multiple(self.key(&["browser", &info.execution_id]), &[
                 ("browser_id", info.browser_id.as_str()),
-                ("host", info.host.as_str()),
+                ("public_ip", info.public_ip.as_str()),
+                ("private_ip", info.private_ip.as_str()),
                 ("grpc_port", &info.grpc_port.to_string()),
                 ("state", info.state.as_str()),
             ])
@@ -102,7 +103,7 @@ impl RedisStore {
         // HMGET browser:{execution_id} field ... — nil for missing fields
         let fields: Vec<Option<String>> = redis::cmd("HMGET")
             .arg(self.key(&["browser", execution_id]))
-            .arg(&["browser_id", "host", "grpc_port", "state"])
+            .arg(&["browser_id", "public_ip", "private_ip", "grpc_port", "state"])
             .query_async(&mut conn)
             .await?;
         self.hydrate(execution_id, fields).await
@@ -112,11 +113,12 @@ impl RedisStore {
     /// connection field is absent — a partial record is not a usable browser.
     async fn hydrate(&self, execution_id: &str, fields: Vec<Option<String>>) -> Result<Option<BrowserInfo>, StorageError> {
         let Some(browser_id) = fields[0].clone() else { return Ok(None); };
-        let Some(host) = fields[1].clone() else { return Ok(None); };
-        let Some(grpc_port) = fields[2].as_deref().and_then(|p| p.parse().ok()) else { return Ok(None); };
-        let state = BrowserState::from_str(fields[3].as_deref().unwrap_or("idle"));
+        let Some(public_ip) = fields[1].clone() else { return Ok(None); };
+        let Some(private_ip) = fields[2].clone() else { return Ok(None); };
+        let Some(grpc_port) = fields[3].as_deref().and_then(|p| p.parse().ok()) else { return Ok(None); };
+        let state = BrowserState::from_str(fields[4].as_deref().unwrap_or("idle"));
         let contexts = self.list_contexts(execution_id).await.unwrap_or_default();
-        Ok(Some(BrowserInfo { execution_id: execution_id.to_string(), browser_id, host, grpc_port, state, contexts }))
+        Ok(Some(BrowserInfo { execution_id: execution_id.to_string(), browser_id, public_ip, private_ip, grpc_port, state, contexts }))
     }
 
     pub async fn list_browsers(&self) -> Result<Vec<BrowserInfo>, StorageError> {

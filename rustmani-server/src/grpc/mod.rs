@@ -24,7 +24,8 @@ impl Master for MasterService {
         let info = BrowserInfo {
             browser_id: req.browser_id.clone(),
             execution_id: req.execution_id.clone(),
-            host: req.host.clone(),
+            public_ip: req.public_ip.clone(),
+            private_ip: req.private_ip.clone(),
             grpc_port: req.grpc_port as u16,
             state: BrowserState::Idle,
             contexts: vec![],
@@ -33,7 +34,7 @@ impl Master for MasterService {
         self.state.redis.upsert_browser(&info).await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        info!("Agent registered: browser={} execution={} addr={}:{}", req.browser_id, req.execution_id, req.host, req.grpc_port);
+        info!("Agent registered: browser={} execution={} public={}:{} private={}", req.browser_id, req.execution_id, req.public_ip, req.grpc_port, req.private_ip);
 
         Ok(Response::new(RegisterResponse { ok: true }))
     }

@@ -51,15 +51,16 @@ pub async fn serve(
 
     let listener = TcpListener::bind("0.0.0.0:0").await?;
     let grpc_port = listener.local_addr()?.port();
-    let host = std::env::var("RUSTMANI_AGENT_HOST").unwrap_or_else(|_| local_ip());
+    let private_ip = local_ip();
+    let public_ip = detect_public_ip().await.unwrap_or_else(|| private_ip.clone());
 
-    info!("Browser agent {browser_id} listening on {host}:{grpc_port} (TLS)");
+    info!("Browser agent {browser_id} listening on {public_ip}/{private_ip}:{grpc_port} (TLS)");
 
-    // Register with master — stream stays open for liveness
     let registration = RegisterAgentRequest {
         execution_id: execution_id.to_string(),
         browser_id: browser_id.to_string(),
-        host: host.clone(),
+        public_ip: public_ip.clone(),
+        private_ip: private_ip.clone(),
         grpc_port: grpc_port as u32,
     };
     let master = master_url.to_string();
@@ -97,6 +98,16 @@ pub async fn serve(
         .map_err(|e| GrpcError::Serve(e.to_string()))?;
 
     Ok(())
+}
+
+async fn detect_public_ip() -> Option<String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect("api.ipify.org:80").await.ok()?;
+    stream.write_all(b"GET / HTTP/1.0\r\nHost: api.ipify.org\r\n\r\n").await.ok()?;
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).await.ok()?;
+    let response = String::from_utf8(buf).ok()?;
+    response.split("\r\n\r\n").nth(1).map(|s| s.trim().to_string())
 }
 
 /// Determine the outbound IP by opening a UDP socket toward a public address.

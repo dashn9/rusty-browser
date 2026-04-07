@@ -14,8 +14,9 @@ service Master {
 message RegisterAgentRequest {
   string execution_id = 1;
   string browser_id   = 2;
-  string host         = 3;
-  uint32 grpc_port    = 4;
+  string public_ip    = 3;
+  string private_ip   = 4;
+  uint32 grpc_port    = 5;
 }
 
 message RegisterResponse {

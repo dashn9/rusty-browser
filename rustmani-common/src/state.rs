@@ -30,7 +30,8 @@ impl BrowserState {
 pub struct BrowserInfo {
     pub browser_id: String,
     pub execution_id: String,
-    pub host: String,
+    pub public_ip: String,
+    pub private_ip: String,
     pub grpc_port: u16,
     pub state: BrowserState,
     pub contexts: Vec<String>,

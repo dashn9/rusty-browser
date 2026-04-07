@@ -69,7 +69,8 @@ impl BrowserService {
                 serde_json::json!({
                     "execution_id": browser.execution_id,
                     "browser_id": browser.browser_id,
-                    "host": browser.host,
+                    "public_ip": browser.public_ip,
+                    "private_ip": browser.private_ip,
                     "contexts": browser.contexts,
                     "deleted": ok,
                 })
@@ -221,22 +222,40 @@ impl BrowserService {
     }
 
     async fn connect(&self, browser: &BrowserInfo) -> Result<GrpcClient, AppError> {
+        const MAX_RETRIES: u32 = 3;
+        const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
+
         let cert_pem = self.state.redis.get_tls_cert().await?
             .ok_or_else(|| AppError::Internal("TLS cert not found — run /initialize first".into()))?;
 
-        let tls = tonic::transport::ClientTlsConfig::new()
-            .ca_certificate(tonic::transport::Certificate::from_pem(&cert_pem))
-            .domain_name("rustmani-agent");
+        let addr = format!("https://{}:{}", browser.public_ip, browser.grpc_port);
 
-        let addr = format!("https://{}:{}", browser.host, browser.grpc_port);
-        tonic::transport::Channel::from_shared(addr)
-            .map_err(|e| AppError::Internal(format!("Invalid addr: {e}")))?
-            .tls_config(tls)
-            .map_err(|e| AppError::Internal(format!("TLS config: {e}")))?
-            .connect()
-            .await
-            .map(GrpcClient::new)
-            .map_err(|e| AppError::Internal(format!("Connect: {e}")))
+        for attempt in 0..MAX_RETRIES {
+            let tls = tonic::transport::ClientTlsConfig::new()
+                .ca_certificate(tonic::transport::Certificate::from_pem(&cert_pem))
+                .domain_name("rustmani-agent");
+
+            match tonic::transport::Channel::from_shared(addr.clone())
+                .map_err(|e| AppError::Internal(format!("Invalid addr: {e}")))?
+                .tls_config(tls)
+                .map_err(|e| AppError::Internal(format!("TLS config: {e}")))?
+                .connect()
+                .await
+            {
+                Ok(ch) => return Ok(GrpcClient::new(ch)),
+                Err(e) => {
+                    if attempt + 1 == MAX_RETRIES {
+                        tracing::warn!("Connect exhausted for {}, removing: {e}", browser.execution_id);
+                        let _ = self.state.redis.clear_instruct(&browser.execution_id).await;
+                        let _ = self.state.redis.remove_browser(&browser.execution_id).await;
+                        return Err(AppError::Internal(format!("Connect: {e}")));
+                    }
+                    tracing::warn!("Connect attempt {} failed for {}: {e}", attempt + 1, browser.execution_id);
+                    tokio::time::sleep(RETRY_DELAY).await;
+                }
+            }
+        }
+        unreachable!()
     }
 }
 

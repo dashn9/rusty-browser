@@ -43,8 +43,16 @@ pub async fn delete_browser(
     Path(execution_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     svc(&state).delete_browser(&execution_id).await?;
-    Ok(Json(serde_json::json!({ "deleted": execution_id})))
+    Ok(Json(serde_json::json!({ "deleted": execution_id })))
 }
+
+pub async fn delete_all_browsers(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let log = svc(&state).delete_all_browsers().await?;
+    Ok(Json(serde_json::json!({ "deleted": log })))
+}
+
 
 pub async fn create_context(
     State(state): State<Arc<AppState>>,

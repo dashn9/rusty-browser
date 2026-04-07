@@ -39,6 +39,23 @@ impl RedisStore {
         Ok(())
     }
 
+    pub async fn list_pending_agents(&self) -> Result<Vec<String>, StorageError> {
+        let mut conn = self.conn.clone();
+        let ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
+            .arg(self.key(&["pending_agents"]))
+            .arg("-inf")
+            .arg("+inf")
+            .query_async(&mut conn)
+            .await?;
+        Ok(ids)
+    }
+
+    pub async fn clear_pending_agents(&self) -> Result<(), StorageError> {
+        let mut conn = self.conn.clone();
+        let _: () = conn.del(self.key(&["pending_agents"])).await?;
+        Ok(())
+    }
+
     /// Returns execution_ids spawned more than `older_than_secs` ago with no registration.
     pub async fn list_stale_agents(&self, older_than_secs: u64) -> Result<Vec<String>, StorageError> {
         let mut conn = self.conn.clone();

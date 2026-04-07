@@ -66,16 +66,22 @@ async fn main() -> Result<()> {
     let http_port = config.server.http_port;
     let grpc_port = config.server.grpc_port.expect("grpc_port resolved at startup");
 
-    // Warn about agents that were spawned but never registered
+    // Cancel and clean up pending agents that never registered within the timeout
     tokio::spawn({
         let redis = state.redis.clone();
+        let flux = state.flux.clone();
+        let timeout = config.flux.pending_timeout_secs;
         async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(timeout));
             loop {
                 interval.tick().await;
-                match redis.list_stale_agents(60).await {
+                match redis.list_stale_agents(timeout).await {
                     Ok(ids) if !ids.is_empty() => {
-                        tracing::warn!("Executions with no agent registration after 60s: {:?}", ids);
+                        for id in ids {
+                            tracing::warn!("Pending agent timed out, cancelling: {id}");
+                            let _ = flux.cancel_execution(&id).await;
+                            let _ = redis.remove_browser(&id).await;
+                        }
                     }
                     Err(e) => tracing::warn!("Stale agent check failed: {e}"),
                     _ => {}

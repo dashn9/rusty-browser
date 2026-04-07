@@ -51,13 +51,37 @@ impl BrowserService {
     }
 
     pub async fn delete_browser(&self, execution_id: &str) -> Result<(), AppError> {
-        self.exec(execution_id, "", Action::CloseBrowser(CloseBrowser {})).await
-            .or_else(|e| match e {
-                AppError::Browser(BrowserError::NotFound(_)) => Ok(()),
-                other => Err(other),
-            })?;
+        // Agent calls process::exit(0) on CloseBrowser — it may exit before replying
+        let _ = self.exec(execution_id, "", Action::CloseBrowser(CloseBrowser {})).await;
+        let _ = self.state.redis.clear_instruct(execution_id).await;
         self.state.redis.remove_browser(execution_id).await?;
         Ok(())
+    }
+
+    pub async fn delete_all_browsers(&self) -> Result<Vec<serde_json::Value>, AppError> {
+        let browsers = self.state.redis.list_browsers().await?;
+        let mut set = tokio::task::JoinSet::new();
+        for b in &browsers {
+            let svc = BrowserService::new(self.state.clone());
+            let browser = b.clone();
+            set.spawn(async move {
+                let ok = svc.delete_browser(&browser.execution_id).await.is_ok();
+                serde_json::json!({
+                    "execution_id": browser.execution_id,
+                    "browser_id": browser.browser_id,
+                    "host": browser.host,
+                    "contexts": browser.contexts,
+                    "deleted": ok,
+                })
+            });
+        }
+        let mut log = Vec::new();
+        while let Some(res) = set.join_next().await {
+            if let Ok(entry) = res {
+                log.push(entry);
+            }
+        }
+        Ok(log)
     }
 
     pub async fn create_context(&self, execution_id: &str) -> Result<String, AppError> {

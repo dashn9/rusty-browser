@@ -127,6 +127,20 @@ impl FluxClient {
         resp.text().await.map_err(|e| FluxError::Parse(e.to_string()))
     }
 
+    pub async fn cancel_execution(&self, execution_id: &str) -> Result<(), FluxError> {
+        let resp = self.client
+            .delete(format!("{}/executions/{execution_id}", self.url))
+            .header("X-API-Key", &self.token)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(FluxError::Http { status, body });
+        }
+        Ok(())
+    }
+
     pub async fn terminate_all_nodes(&self) -> Result<(), FluxError> {
         let resp = self.client
             .delete(format!("{}/nodes", self.url))

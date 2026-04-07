@@ -125,7 +125,11 @@ pub struct FluxConfig {
     pub function_name: String,
     #[serde(default)]
     pub github_release_base_url: Option<String>,
+    #[serde(default = "default_pending_timeout_secs")]
+    pub pending_timeout_secs: u64,
 }
+
+fn default_pending_timeout_secs() -> u64 { 5 }
 
 fn default_proxy_file() -> String {
     "agent-proxies.yaml".to_string()

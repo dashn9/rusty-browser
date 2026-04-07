@@ -113,7 +113,7 @@ impl FluxClient {
     /// Fetches the stdout/stderr log for a specific execution.
     pub async fn get_execution_logs(&self, execution_id: &str) -> Result<String, FluxError> {
         let resp = self.client
-            .get(format!("{}/executions/{execution_id}/logs", self.url))
+            .get(format!("{}/executions/{execution_id}", self.url))
             .header("X-API-Key", &self.token)
             .send()
             .await?;

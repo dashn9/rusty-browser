@@ -1,6 +1,7 @@
 server:
   http_port: 8080
-  # grpc_port: 50050  # omit to let the OS assign a free port
+  # grpc_port: 50050          # local port the gRPC server binds to; omit to let the OS assign a free port
+  # grpc_server_url: "https://abc123.ngrok.io"  # externally reachable gRPC URL advertised to agents; defaults to https://{public_ip}:{grpc_port}
 
 redis:
   url: "redis://127.0.0.1:6379"
@@ -19,6 +20,7 @@ flux:
   base_url: "http://127.0.0.1:7227"
   api_key: "your_flux_api_key"
   function_name: "rustmani-agent"
+  # pending_timeout_secs: 30  # how long to wait for an agent to register before cancelling it
 
 # proxy_file: "agent-proxies.yaml"  # bundled into agent zip at initialization
 

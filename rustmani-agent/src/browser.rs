@@ -98,13 +98,11 @@ impl ManagedBrowser {
     }
 
     fn select_proxy(geo: &rustenium_identity::IdentityCountryGeo) -> Option<String> {
-        let list = match ProxyList::load("agent-proxies.yaml") {
-            Some(l) => l,
-            None => {
-                tracing::warn!("[ManagedBrowser] agent-proxies.yaml not found, skipping proxy");
-                return None;
-            }
-        };
+        if !std::path::Path::new("agent-proxies.yaml").exists() {
+            tracing::warn!("[ManagedBrowser] agent-proxies.yaml not found, skipping proxy");
+            return None;
+        }
+        let list = ProxyList::load("agent-proxies.yaml")?;
         let mut rng = rand::thread_rng();
         let by_geo = list.get_proxies_for_geo(Some(geo.as_str()));
         let proxy = if !by_geo.is_empty() {

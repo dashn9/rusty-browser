@@ -28,13 +28,18 @@ impl BrowserService {
     /// Spawns a new agent via Flux. Returns the execution_id — the agent registers back
     /// via gRPC with its browser_id and connection details.
     pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<String, AppError> {
-        let master_url = format!(
-            "https://{}:{}",
-            self.state.public_ip,
-            self.state.config.server.grpc_port.expect("grpc_port resolved at startup"),
-        );
+        let master_url = self.state.config.server.grpc_server_url.clone().unwrap_or_else(|| {
+            format!(
+                "https://{}:{}",
+                self.state.public_ip,
+                self.state.config.server.grpc_port.expect("grpc_port resolved at startup"),
+            )
+        });
         // master_url is argv[1]; any identity args follow
         let mut args = vec![master_url.clone()];
+        if self.state.config.server.grpc_server_url.is_some() {
+            args.push("--native-tls".to_string());
+        }
         args.extend(identity.into_iter().map(|v| v.to_string()));
         let execution_id = self.state.flux.spawn_agent(&self.state.config.flux.function_name, &args).await?;
         self.state.redis.store_pending_execution(&execution_id).await?;

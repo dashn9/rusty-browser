@@ -29,8 +29,11 @@ pub struct BrowserConfig {
 pub struct ServerConfig {
     #[serde(default = "default_http_port")]
     pub http_port: u16,
-    /// gRPC port for agent registration. Omit to let the OS assign a free port.
+    /// Local port the gRPC server binds to. Omit to let the OS assign a free port.
     pub grpc_port: Option<u16>,
+    /// The gRPC URL advertised to agents. Use this to set an ngrok tunnel or any
+    /// externally reachable address. If unset, defaults to https://{public_ip}:{grpc_port}.
+    pub grpc_server_url: Option<String>,
 }
 
 fn default_http_port() -> u16 { 8080 }
@@ -129,7 +132,7 @@ pub struct FluxConfig {
     pub pending_timeout_secs: u64,
 }
 
-fn default_pending_timeout_secs() -> u64 { 5 }
+fn default_pending_timeout_secs() -> u64 { 10 }
 
 fn default_proxy_file() -> String {
     "agent-proxies.yaml".to_string()
@@ -169,11 +172,10 @@ fn substitute_env_vars(input: &str) -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyList(Vec<GeoProxyEntry>);
+pub struct ProxyList(std::collections::HashMap<String, GeoProxyEntry>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeoProxyEntry {
-    pub geo: String,
     #[serde(default)]
     pub proxies: Vec<String>,
 }
@@ -181,23 +183,22 @@ pub struct GeoProxyEntry {
 impl ProxyList {
     pub fn load(path: &str) -> Option<Self> {
         let content = std::fs::read_to_string(path).ok()?;
-        yaml_serde::from_str(&content).ok()
+        match yaml_serde::from_str(&content) {
+            Ok(list) => Some(list),
+            Err(e) => {
+                tracing::warn!("Failed to parse {path}: {e}");
+                None
+            }
+        }
     }
 
     pub fn get_proxies_for_geo(&self, geo: Option<&str>) -> Vec<String> {
         let target_geo = geo.unwrap_or("").to_uppercase();
-
-        for entry in &self.0 {
-            if entry.geo.to_uppercase() == target_geo {
-                return entry.proxies.clone();
-            }
-        }
-
-        Vec::new()
+        self.0.get(&target_geo).map(|e| e.proxies.clone()).unwrap_or_default()
     }
 
     pub fn get_all(&self) -> Vec<&str> {
-        self.0.iter()
+        self.0.values()
             .flat_map(|e| e.proxies.iter().map(String::as_str))
             .collect()
     }

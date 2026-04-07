@@ -23,9 +23,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let execution_id = std::env::var("FLUX_EXECUTION_ID")
         .expect("FLUX_EXECUTION_ID must be set by Flux");
 
+    let args: Vec<String> = std::env::args().collect();
     // master_url is passed as the first positional arg by the server at spawn time
-    let master_url = std::env::args().nth(1)
+    let master_url = args.get(1).cloned()
         .expect("master_url must be passed as the first argument");
+    let native_tls = args.contains(&"--native-tls".to_string());
 
     let browser_id = Uuid::new_v4().to_string();
     let browser_config = browser::ChromeBrowserLaunchConfig::from_env().unwrap_or_default();
@@ -34,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let browser = browser::ManagedBrowser::launch(browser_config).await?;
 
-    server::serve(browser, &browser_id, &execution_id, &master_url).await?;
+    server::serve(browser, &browser_id, &execution_id, &master_url, native_tls).await?;
 
     Ok(())
 }

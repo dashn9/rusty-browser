@@ -228,7 +228,7 @@ impl BrowserService {
         let cert_pem = self.state.redis.get_tls_cert().await?
             .ok_or_else(|| AppError::Internal("TLS cert not found — run /initialize first".into()))?;
 
-        let addr = format!("https://{}:{}", browser.private_ip, browser.grpc_port);
+        let addr = format!("https://{}:{}", browser.public_ip, browser.grpc_port);
 
         for attempt in 0..MAX_RETRIES {
             let tls = tonic::transport::ClientTlsConfig::new()

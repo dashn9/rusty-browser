@@ -23,7 +23,7 @@ thiserror = "2.0.18"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tracing = "0.1.44"
 uuid = { version = "1.23.0", features = ["v4"] }
-tonic = { version = "0.14.5", features = ["tls-ring"] }
+tonic = { version = "0.14.5", features = ["tls-ring", "tls-native-roots"] }
 rustls = { version = "0.23", features = ["ring"] }
 prost = "0.14.3"
 tokio-stream = "0.1.18"

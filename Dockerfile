@@ -1,5 +1,5 @@
 # ── Build ──────────────────────────────────────────────────────────────────────
-FROM rust:1.87-slim AS builder
+FROM rust:1.93-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     protobuf-compiler \

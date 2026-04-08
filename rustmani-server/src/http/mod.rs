@@ -18,6 +18,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/browsers/", put(browsers::create_browser))
         .route("/browsers/", get(browsers::list_browsers))
         .route("/browsers/", delete(browsers::delete_all_browsers))
+        .route("/teardown/", delete(browsers::teardown))
         .route("/browsers/{execution_id}/", get(browsers::get_browser))
         .route("/browsers/{execution_id}/", delete(browsers::delete_browser))
         .route("/browsers/{execution_id}/contexts/", put(browsers::create_context))

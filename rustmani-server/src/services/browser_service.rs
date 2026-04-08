@@ -153,6 +153,15 @@ impl BrowserService {
         self.exec(execution_id, "", Action::ScrollTo(ScrollTo { selector, human, to })).await
     }
 
+    pub async fn teardown(&self) -> Result<serde_json::Value, AppError> {
+        let browsers = self.delete_all_browsers().await?;
+        let nodes_terminated = self.state.flux.terminate_all_nodes().await.is_ok();
+        Ok(serde_json::json!({
+            "browsers": browsers,
+            "nodes_terminated": nodes_terminated,
+        }))
+    }
+
     pub async fn get_execution_logs(&self, execution_id: &str) -> Result<String, AppError> {
         self.state.flux.get_execution_logs(execution_id).await
             .map_err(|e| AppError::Internal(format!("Flux logs: {e}")))

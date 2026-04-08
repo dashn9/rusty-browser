@@ -226,6 +226,13 @@ pub async fn fetch_text(
     Ok(Json(serde_json::json!({ "text": text })))
 }
 
+pub async fn teardown(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let result = svc(&state).teardown().await?;
+    Ok(Json(result))
+}
+
 pub async fn get_execution_logs(
     State(state): State<Arc<AppState>>,
     Path(execution_id): Path<String>,

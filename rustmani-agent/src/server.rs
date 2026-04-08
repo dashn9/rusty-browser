@@ -67,7 +67,7 @@ pub async fn serve(
     let browser_id_owned = browser_id.to_string();
     let (master, master_tls) = if native_tls {
         // Use system/native root CAs — lets the agent verify cert without bundled master.crt
-        let tls = tonic::transport::ClientTlsConfig::new();
+        let tls = tonic::transport::ClientTlsConfig::new().with_native_roots();
         (master_url.to_string(), tls)
     } else {
         let cert = std::fs::read_to_string("master.crt")

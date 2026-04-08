@@ -27,6 +27,4 @@ EXPOSE 1011
 # GRPC
 EXPOSE 50050
 
-ENV RUSTMANI_CONFIG=/app/rustmani.yaml
-
 ENTRYPOINT ["/app/rustmani"]

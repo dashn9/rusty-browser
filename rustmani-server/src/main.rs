@@ -13,6 +13,7 @@ use rustmani_common::flux::FluxClient;
 use rustmani_common::redis_store::RedisStore;
 use rustmani_common::util::{detect_public_ip, free_port};
 use rustmani_proto::master_server::MasterServer;
+use tower_http::trace::TraceLayer;
 
 pub struct AppState {
     pub config: RustmaniConfig,
@@ -116,6 +117,7 @@ async fn main() -> Result<()> {
         tonic::transport::Server::builder()
             .tls_config(tonic::transport::ServerTlsConfig::new().identity(identity))
             .expect("master TLS config failed")
+            .layer(TraceLayer::new_for_grpc())
             .add_service(MasterServer::new(grpc::MasterService { state: grpc_state }))
             .serve(addr)
             .await

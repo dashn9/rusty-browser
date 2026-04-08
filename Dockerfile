@@ -22,7 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=builder /build/target/release/rustmani /app/rustmani
 
-EXPOSE 8080
+EXPOSE 1011
+
+# GRPC
+EXPOSE 50050
 
 ENV RUSTMANI_CONFIG=/app/rustmani.yaml
 

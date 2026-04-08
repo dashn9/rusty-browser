@@ -31,8 +31,10 @@ impl Master for MasterService {
             contexts: vec![],
         };
 
-        self.state.redis.upsert_browser(&info).await
-            .map_err(|e| Status::internal(e.to_string()))?;
+        self.state.redis.upsert_browser(&info).await.map_err(|e| {
+            warn!("Failed to register agent execution={} browser={}: {e}", req.execution_id, req.browser_id);
+            Status::internal(e.to_string())
+        })?;
 
         info!("Agent registered: browser={} execution={} public={}:{} private={}", req.browser_id, req.execution_id, req.public_ip, req.grpc_port, req.private_ip);
 

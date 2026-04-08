@@ -20,6 +20,7 @@ impl Master for MasterService {
         request: Request<RegisterAgentRequest>,
     ) -> Result<Response<RegisterResponse>, Status> {
         let req = request.into_inner();
+        info!("Recieved registration request for execution={} browser={}", req.execution_id, req.browser_id);
 
         let info = BrowserInfo {
             browser_id: req.browser_id.clone(),

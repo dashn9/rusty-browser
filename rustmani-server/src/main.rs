@@ -110,13 +110,20 @@ async fn main() -> Result<()> {
 
     // gRPC server — agents connect here to register
     let grpc_state = state.clone();
+    let insecure_grpc = config.server.insecure_grpc;
     tokio::spawn(async move {
         let addr = format!("0.0.0.0:{}", grpc_port).parse().expect("valid grpc addr");
-        info!("Master gRPC listening on {addr} (TLS)");
-        let identity = tonic::transport::Identity::from_pem(&master_cert_pem, &master_key_pem);
-        tonic::transport::Server::builder()
-            .tls_config(tonic::transport::ServerTlsConfig::new().identity(identity))
-            .expect("master TLS config failed")
+        let mut builder = tonic::transport::Server::builder();
+        if insecure_grpc {
+            info!("Master gRPC listening on {addr} (insecure, no TLS)");
+        } else {
+            info!("Master gRPC listening on {addr} (TLS)");
+            let identity = tonic::transport::Identity::from_pem(&master_cert_pem, &master_key_pem);
+            builder = builder
+                .tls_config(tonic::transport::ServerTlsConfig::new().identity(identity))
+                .expect("master TLS config failed");
+        }
+        builder
             .layer(TraceLayer::new_for_grpc())
             .add_service(MasterServer::new(grpc::MasterService { state: grpc_state }))
             .serve(addr)

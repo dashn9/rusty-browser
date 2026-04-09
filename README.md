@@ -82,7 +82,8 @@ Most browser automation tools treat the browser as a local subprocess. That work
 |--------|------|-------------|
 | `PUT` | `/browsers/` | Spawn a new browser agent |
 | `GET` | `/browsers/` | List all active browsers |
-| `DELETE` | `/browsers/` | Teardown all browsers |
+| `DELETE` | `/browsers/` | Delete all browsers |
+| `DELETE` | `/teardown/` | Delete all browsers and terminate all Flux nodes |
 | `GET` | `/browsers/{id}/` | Get browser info |
 | `DELETE` | `/browsers/{id}/` | Close and deregister a browser |
 

@@ -34,6 +34,9 @@ pub struct ServerConfig {
     /// The gRPC URL advertised to agents. Use this to set an ngrok tunnel or any
     /// externally reachable address. If unset, defaults to https://{public_ip}:{grpc_port}.
     pub grpc_server_url: Option<String>,
+    /// Accept plain gRPC connections on the master server (no TLS). For development/local use only.
+    #[serde(default)]
+    pub insecure_grpc: bool,
 }
 
 fn default_http_port() -> u16 { 8080 }

@@ -108,6 +108,8 @@ async fn main() -> Result<()> {
         }
     };
 
+    // TODO: Due to rustmani hiding behind a reverse proxy that uses it's own tls to establish the connection
+    // WE can opt for the payload itself to be encrypted bi server and agent while tls does it's own thing if we have have or delegate control of it
     // gRPC server — agents connect here to register
     let grpc_state = state.clone();
     let insecure_grpc = config.server.insecure_grpc;

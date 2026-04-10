@@ -8,7 +8,7 @@
     "globals": [],
     "mocks": [],
     "specs": [
-      "..\\rustmani-proto\\proto\\rustmani.proto"
+      "..\\rusty-proto\\proto\\rusty.proto"
     ],
     "collections": []
   }

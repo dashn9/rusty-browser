@@ -7,14 +7,14 @@ on:
         description: 'Packages to release (comma-separated)'
         type: string
         required: true
-        default: 'rustmani-agent,rustmani-server'
+        default: 'rusty-agent,rusty-server'
       force_agent:
-        description: 'Force release for rustmani-agent'
+        description: 'Force release for rusty-agent'
         type: boolean
         required: false
         default: false
       force_server:
-        description: 'Force release for rustmani-server'
+        description: 'Force release for rusty-server'
         type: boolean
         required: false
         default: false
@@ -24,9 +24,9 @@ env:
 
 jobs:
   release_agent:
-    name: Release rustmani-agent
+    name: Release rusty-agent
     runs-on: ubuntu-22.04
-    if: contains(inputs.packages, 'rustmani-agent')
+    if: contains(inputs.packages, 'rusty-agent')
     permissions:
       contents: write
     outputs:
@@ -38,7 +38,7 @@ jobs:
       - name: Read Version
         id: version
         run: |
-          VERSION=$(grep '^version = ' rustmani-agent/Cargo.toml | head -1 | cut -d '"' -f 2)
+          VERSION=$(grep '^version = ' rusty-agent/Cargo.toml | head -1 | cut -d '"' -f 2)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check Existing Release
@@ -72,21 +72,21 @@ jobs:
           sudo apt-get install -y --no-install-recommends pkg-config libssl-dev protobuf-compiler
 
       - name: Build
-        run: cargo build --release -p rustmani-agent
+        run: cargo build --release -p rusty-agent
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: target/release/rustmani-agent
+          files: target/release/rusty-agent
           draft: false
           prerelease: false
           generate_release_notes: false
 
   release_server:
-    name: Release rustmani-server
+    name: Release rusty-server
     runs-on: ubuntu-22.04
-    if: contains(inputs.packages, 'rustmani-server')
+    if: contains(inputs.packages, 'rusty-server')
     permissions:
       contents: write
     outputs:
@@ -98,7 +98,7 @@ jobs:
       - name: Read Version
         id: version
         run: |
-          VERSION=$(grep '^version = ' rustmani-server/Cargo.toml | head -1 | cut -d '"' -f 2)
+          VERSION=$(grep '^version = ' rusty-server/Cargo.toml | head -1 | cut -d '"' -f 2)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check Existing Release
@@ -135,18 +135,18 @@ jobs:
         run: cargo install cargo-deb --locked
 
       - name: Build
-        run: cargo build --release -p rustmani-server
+        run: cargo build --release -p rusty-server
 
       - name: Package
         run: |
-          cargo deb --no-build -p rustmani-server
-          mv target/debian/rustmani-server_*_amd64.deb target/debian/rustmani-server_amd64.deb
+          cargo deb --no-build -p rusty-server
+          mv target/debian/rusty-server_*_amd64.deb target/debian/rusty-server_amd64.deb
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: target/debian/rustmani-server_amd64.deb
+          files: target/debian/rusty-server_amd64.deb
           draft: false
           prerelease: false
           generate_release_notes: false

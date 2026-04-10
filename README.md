@@ -1,16 +1,16 @@
-# Rustmani
+# Rusty
 
 **Distributed browser automation at scale — built in Rust.**
 
-Rustmani is a serverless browser automation platform. You spawn browser agents on demand via an HTTP API, send them commands (navigate, click, type, screenshot, scroll, eval JS), and drive them with natural language through an AI instruct engine. Each agent runs in isolation, registers itself back to the master over gRPC, and is torn down when you're done.
+Rusty is a serverless browser automation platform. You spawn browser agents on demand via an HTTP API, send them commands (navigate, click, type, screenshot, scroll, eval JS), and drive them with natural language through an AI instruct engine. Each agent runs in isolation, registers itself back to the master over gRPC, and is torn down when you're done.
 
 ---
 
-## Why Rustmani over browser-use, Stagehand, or Playwright?
+## Why Rusty over browser-use, Stagehand, or Playwright?
 
 Most browser automation tools treat the browser as a local subprocess. That works for one browser. It doesn't work for fifty.
 
-| | Rustmani | browser-use | Stagehand | Playwright |
+| | Rusty | browser-use | Stagehand | Playwright |
 |---|---|---|---|---|
 | Language | Rust | Python | TypeScript | JS/Python/Java |
 | Architecture | Distributed (serverless agents) | Single-process | Cloud-managed | Single-process |
@@ -21,7 +21,7 @@ Most browser automation tools treat the browser as a local subprocess. That work
 | Security | Mutual TLS, cert pinning | None | Managed | None |
 | Overhead | Single Rust binary | Python runtime | Node.js runtime | Node.js runtime |
 
-**Rustmani is for when you need browsers to behave like serverless functions** — spawn on demand, run independently, scale horizontally, and clean up automatically. It is not a wrapper around Playwright or Puppeteer. It drives Chromium directly via the [WebDriver BiDi](https://w3c.github.io/webdriver-bidi/) protocol through [rustenium](https://github.com/dashn9/rustenium).
+**Rusty is for when you need browsers to behave like serverless functions** — spawn on demand, run independently, scale horizontally, and clean up automatically. It is not a wrapper around Playwright or Puppeteer. It drives Chromium directly via the [WebDriver BiDi](https://w3c.github.io/webdriver-bidi/) protocol through [rustenium](https://github.com/dashn9/rustenium).
 
 ---
 
@@ -35,12 +35,12 @@ Most browser automation tools treat the browser as a local subprocess. That work
                         │
                         ▼
            ┌────────────────────────┐
-           │     rustmani-server    │
+           │     rusty-server    │
            │  Redis · Flux · AI     │
            └──────┬─────────────────┘
       spawn via   │           gRPC/TLS commands
          Flux     │      ┌────────────────────────┐
-                  └─────►│    rustmani-agent       │
+                  └─────►│    rusty-agent       │
                          │  Chromium · Identity    │
                          │  Proxy · gRPC server    │
                          └────────────────────────┘
@@ -61,10 +61,10 @@ Most browser automation tools treat the browser as a local subprocess. That work
 
 | Crate | Role |
 |---|---|
-| `rustmani-server` | HTTP API + gRPC master + AI instruct engine |
-| `rustmani-agent` | Serverless browser agent (gRPC server over TLS) |
-| `rustmani-common` | Shared types, Redis store, Flux client, config, AI provider |
-| `rustmani-proto` | Protobuf definitions and generated Rust bindings |
+| `rusty-server` | HTTP API + gRPC master + AI instruct engine |
+| `rusty-agent` | Serverless browser agent (gRPC server over TLS) |
+| `rusty-common` | Shared types, Redis store, Flux client, config, AI provider |
+| `rusty-proto` | Protobuf definitions and generated Rust bindings |
 
 ---
 
@@ -115,12 +115,12 @@ Most browser automation tools treat the browser as a local subprocess. That work
 
 ## Configuration
 
-See [`rustmani-server/example.rustmani.yaml`](rustmani-server/example.rustmani.yaml) for a full annotated reference.
+See [`rusty-server/example.rusty.yaml`](rusty-server/example.rusty.yaml) for a full annotated reference.
 
 Start the server:
 
 ```sh
-RUSTMANI_CONFIG=rustmani.yaml cargo run --release --bin rustmani
+RUSTY_CONFIG=rusty.yaml cargo run --release --bin rusty
 ```
 
 ---
@@ -133,7 +133,7 @@ Before spawning any browsers, call `POST /initialize/` once. This generates TLS 
 
 ## Proxy Support
 
-See [`rustmani-server/example.agent-proxies.yaml`](rustmani-server/example.agent-proxies.yaml). Proxies are geo-matched to the browser identity and bundled into each agent at initialization.
+See [`rusty-server/example.agent-proxies.yaml`](rusty-server/example.agent-proxies.yaml). Proxies are geo-matched to the browser identity and bundled into each agent at initialization.
 
 ---
 

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 COPY . .
 
-RUN cargo build --release -p rustmani-server
+RUN cargo build --release -p rusty-server
 
 # ── Runtime ────────────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -20,11 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=builder /build/target/release/rustmani /app/rustmani
+COPY --from=builder /build/target/release/rusty /app/rusty
 
 EXPOSE 1011
 
 # GRPC
 EXPOSE 50050
 
-ENTRYPOINT ["/app/rustmani"]
+ENTRYPOINT ["/app/rusty"]

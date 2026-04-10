@@ -2764,7 +2764,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustmani-agent"
+name = "rusty-agent"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -2775,8 +2775,8 @@ dependencies = [
  "rustenium-identity",
  "rustenium-macros",
  "rustls",
- "rustmani-common",
- "rustmani-proto",
+ "rusty-common",
+ "rusty-proto",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2789,7 +2789,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustmani-common"
+name = "rusty-common"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
@@ -2807,7 +2807,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustmani-proto"
+name = "rusty-proto"
 version = "0.1.0"
 dependencies = [
  "prost",
@@ -2818,7 +2818,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustmani-server"
+name = "rusty-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2832,8 +2832,8 @@ dependencies = [
  "redis",
  "reqwest 0.13.2",
  "rustls",
- "rustmani-common",
- "rustmani-proto",
+ "rusty-common",
+ "rusty-proto",
  "serde",
  "serde_json",
  "serde_yaml",

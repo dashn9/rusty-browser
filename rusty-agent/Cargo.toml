@@ -1,0 +1,48 @@
+[package]
+name = "rusty-agent"
+version = "0.1.0"
+edition = "2024"
+description = "Rusty browser agent — a single-browser gRPC node managed by Flux"
+license = "MIT"
+
+[[bin]]
+name = "rusty-agent"
+path = "src/main.rs"
+
+[dependencies]
+rusty-common = { path = "../rusty-common" }
+rusty-proto = { path = "../rusty-proto" }
+rustenium-identity = "0.1.6"
+rustenium = "1.1.6"
+rustenium-bidi-definitions = "0.1.1"
+rustenium-macros = "1.0.0"
+tokio = { version = "1.50.0", features = ["full"] }
+serde = "1.0.228"
+serde_json = "1.0.149"
+thiserror = "2.0.18"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tracing = "0.1.44"
+uuid = { version = "1.23.0", features = ["v4"] }
+tonic = { version = "0.14.5", features = ["tls-ring", "tls-native-roots"] }
+rustls = { version = "0.23", features = ["ring"] }
+prost = "0.14.3"
+tokio-stream = "0.1.18"
+rand = "0.8"
+clap = { version = "4", features = ["derive"] }
+
+[package.metadata.deb]
+name = "rusty-agent"
+revision = "0"
+priority = "optional"
+section = "net"
+maintainer = "Daniel Shogbon <ishogbon@gmail.com>"
+copyright = "@2025"
+extended-description = """
+A lightweight browser agent for the Rusty automation cluster.
+Each instance owns exactly one browser and exposes a gRPC server
+for the master server to connect to and send commands.
+"""
+assets = [
+  ["target/release/rusty-agent", "usr/bin/rusty-agent", "755"],
+]
+systemd-units = [{ unit-name = "rusty-agent" }]

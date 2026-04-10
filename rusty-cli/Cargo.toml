@@ -1,0 +1,13 @@
+[package]
+name = "rusty-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "rusty-cli"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1.0.149"
+reqwest = "0.13.2"
+clap = "4.6.0"

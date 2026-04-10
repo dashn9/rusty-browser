@@ -1,0 +1,43 @@
+server:
+  http_port: 8080
+  # grpc_port: 50050          # local port the gRPC server binds to; omit to let the OS assign a free port
+  # grpc_server_url: "https://abc123.ngrok.io"  # externally reachable gRPC URL advertised to agents; defaults to https://{public_ip}:{grpc_port}
+  # insecure_grpc: false          # accept plain gRPC on the master server (no TLS); for local/dev use only
+
+redis:
+  url: "redis://127.0.0.1:6379"
+  key_prefix: "rusty:"
+
+ai:
+  provider: "openrouter"
+  api_key: "your_openrouter_api_key"
+  model: "anthropic/claude-sonnet-4-20250514"
+  resolution:
+    max_width: 1280
+    quality: 85
+    format: "jpeg"
+
+flux:
+  base_url: "http://127.0.0.1:7227"
+  api_key: "your_flux_api_key"
+  function_name: "rusty-agent"
+  # pending_timeout_secs: 10  # how long to wait for an agent to register before cancelling it
+
+# proxy_file: "agent-proxies.yaml"  # bundled into agent zip at initialization
+
+# agent_env:
+#   MY_VAR: "value"
+
+# fleet:               # TODO: browser pool pre-warming
+#   min_browsers: 2
+#   idle_timeout_secs: 300
+
+# browser:
+#   chrome_config:
+#     driver_executable_path: "/usr/bin/chromedriver"
+#     sandbox: false
+#     chrome_executable_path: "/usr/bin/google-chrome"
+#     browser_flags:
+#       - "--disable-blink-features=AutomationControlled"
+#       - "--disable-dev-shm-usage"
+#       - "--no-sandbox"

@@ -1,0 +1,133 @@
+syntax = "proto3";
+package rusty;
+
+// Master connects directly to each browser agent.
+service BrowserAgent {
+  rpc Execute(BrowserCommand) returns (CommandResult);
+}
+
+// Agent calls master on startup to store connection info.
+service Master {
+  rpc Register(RegisterAgentRequest) returns (RegisterResponse);
+}
+
+message RegisterAgentRequest {
+  string execution_id = 1;
+  string browser_id   = 2;
+  string public_ip    = 3;
+  string private_ip   = 4;
+  uint32 grpc_port    = 5;
+}
+
+message RegisterResponse {
+  bool ok = 1;
+}
+
+message CommandResult {
+  bool success = 1;
+  string error_message = 2;
+  string result = 3;
+}
+
+message BrowserCommand {
+  string browser_id = 1;
+  string context_id = 2;
+  oneof action {
+    Navigate navigate = 11;
+    Click click = 12;
+    NodeClick node_click = 13;
+    Type type_text = 14;
+    MouseMove mouse_move = 15;
+    HumanMouseMove human_mouse_move = 16;
+    CreateContext create_context = 17;
+    CloseContext close_context = 18;
+    CloseBrowser close_browser = 19;
+    EvalJs eval_js = 20;
+    FindNode find_node = 21;
+    WaitForNode wait_for_node = 22;
+    Screenshot screenshot = 23;
+    ScrollBy scroll_by = 24;
+    ScrollTo scroll_to = 25;
+    FetchHtml fetch_html = 26;
+    FetchText fetch_text = 27;
+  }
+}
+
+message Navigate {
+  string url = 1;
+  string wait_until = 2;
+}
+
+message Click {
+  optional float x = 1;
+  optional float y = 2;
+  bool human = 3;
+}
+
+message NodeClick {
+  string selector = 1;
+  bool human = 2;
+}
+
+message Type {
+  string text = 1;
+  optional string selector = 2;
+}
+
+message MouseMove {
+  optional float x = 1;
+  optional float y = 2;
+  uint32 steps = 3;
+}
+
+message HumanMouseMove {
+  optional float x = 1;
+  optional float y = 2;
+}
+
+message CreateContext {
+  optional string url = 1;
+}
+
+message CloseContext {
+  string context_id = 1;
+}
+
+message CloseBrowser {}
+
+message EvalJs {
+  string script = 1;
+}
+
+message FindNode {
+  string selector = 1;
+}
+
+message WaitForNode {
+  string selector = 1;
+  uint64 timeout_ms = 2;
+}
+
+message Screenshot {
+  uint32 quality = 1;
+  string format = 2;
+}
+
+message ScrollBy {
+  int32 y = 1;
+  bool human = 2;
+}
+
+message ScrollTo {
+  string selector = 1;
+  bool human = 2;
+  uint32 to = 3; // 0 = top of element at viewport top, 100 = bottom of element at viewport bottom
+}
+
+message FetchHtml {
+  optional string selector = 1;
+}
+
+message FetchText {
+  string selector = 1;
+}

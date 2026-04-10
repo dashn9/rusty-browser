@@ -1,0 +1,14 @@
+[Unit]
+Description=Rusty Server - Browser automation master
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rusty
+Environment=RUSTY_CONFIG=/etc/rusty/rusty.yaml
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

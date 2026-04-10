@@ -1,28 +1,28 @@
-# Project Specification: rustmani
+# Project Specification: rusty
 
 **Project Goal:** A high-concurrency browser automation orchestrator leveraging `serverless-flux` for elastic scaling, `rustenium` for human-emulated interaction, and direct gRPC communication between the Master and browser agents.
 
 ## 1. System Components
 
-### rustmani-server (Master)
+### rusty-server (Master)
 The central orchestrator and state authority. Provides a unified HTTP API secured by **API Key authentication**.
 * **Browser Registry:** Tracks all active browser agents in Redis. Each entry stores the browser's `id`, `host`, `gRPC port`, `contexts`, and `state`.
 * **Direct gRPC Client:** Connects to each browser agent using its registered host + gRPC port to send commands.
 * **AI Instruct Engine:** Takes screenshots from browser agents, processes them (downscaling), sends to an AI provider, and dispatches the resulting actions back.
 
-### rustmani-agent (Browser Agent)
+### rusty-agent (Browser Agent)
 The execution unit deployed via Flux. Each agent owns exactly one browser instance.
 * **Startup:** Flux spawns the agent. The agent launches the browser and starts a gRPC server. Flux returns the agent's `browser_id`, `host`, and `gRPC port` to the Master, which registers it.
 * **gRPC Server:** Exposes a `BrowserAgent` service. The Master connects directly to send `BrowserCommand` messages and receive `CommandResult` responses.
 * **Driver Layer:** Uses `rustenium` for browser interactions and `rustenium-identity` for fingerprint/profile management.
 
-### rustmani-cli
+### rusty-cli
 Developer interface for interacting with the cluster — creating browsers, running instruct tasks, and inspecting state.
 
-### rustmani-common
+### rusty-common
 Shared types, config, Redis store, AI provider interface, and Flux client used by both the server and agent.
 
-### rustmani-proto
+### rusty-proto
 Protobuf definitions shared across the workspace.
 
 ---
@@ -75,7 +75,7 @@ service BrowserAgent {
 
 ## 5. Configuration
 
-* **`rustmani.yaml`** — Global settings: Redis, Flux, AI provider, resolution config, API keys.
+* **`rusty.yaml`** — Global settings: Redis, Flux, AI provider, resolution config, API keys.
 * **`flux.yaml`** — Serverless triggers and resource limits for browser agent deployments.
 
 ---

@@ -1,0 +1,65 @@
+use async_trait::async_trait;
+use base64::Engine;
+use std::sync::Arc;
+
+use rusty_common::ai::BrowserAction;
+
+use crate::http::error::AppError;
+use crate::AppState;
+
+#[async_trait]
+pub trait AIInstructor: Send + Sync {
+    fn state(&self) -> &Arc<AppState>;
+
+    async fn screenshot(&self, execution_id: &str) -> Result<Option<Vec<u8>>, AppError>;
+
+    async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<(), AppError>;
+
+    async fn instruct(&self, execution_id: &str, instruction: &str) -> Result<(), AppError> {
+        let raw = self.screenshot(execution_id).await?
+            .ok_or_else(|| AppError::Internal("No screenshot data".into()))?;
+
+        let processed = downscale(
+            &raw,
+            self.state().config.ai.resolution.max_width,
+            self.state().config.ai.resolution.quality,
+        )?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&processed);
+
+        let ai_response = self.state().ai_provider
+            .analyze_screenshot(b64, instruction.to_string())
+            .await
+            .map_err(AppError::AI)?;
+
+        for action in &ai_response {
+            self.dispatch(execution_id, action).await?;
+        }
+
+        Ok(())
+    }
+}
+
+fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, AppError> {
+    if data.is_empty() {
+        return Ok(data.to_vec());
+    }
+    let img = image::load_from_memory(data)
+        .map_err(|e| AppError::Internal(format!("Decode: {e}")))?;
+    let img = if img.width() > max_width {
+        let ratio = max_width as f32 / img.width() as f32;
+        img.resize(
+            max_width,
+            (img.height() as f32 * ratio) as u32,
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        img
+    };
+    let mut buf = std::io::Cursor::new(Vec::new());
+    img.write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(
+        &mut buf,
+        quality as u8,
+    ))
+    .map_err(|e| AppError::Internal(format!("Encode: {e}")))?;
+    Ok(buf.into_inner())
+}

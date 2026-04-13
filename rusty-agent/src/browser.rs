@@ -142,7 +142,7 @@ impl ManagedBrowser {
             .map_err(|e| BrowserError::Navigate(e.to_string()))
     }
 
-    pub async fn screenshot(&mut self, quality: u32, format: &str) -> Result<String, BrowserError> {
+    pub async fn screenshot(&mut self, quality: f32, format: &str) -> Result<String, BrowserError> {
         let mut opts = BrowserScreenshotOptionsBuilder::default();
         opts = opts.origin(CaptureScreenshotOrigin::Document);
         opts = opts.format(ImageFormatBuilder::default().quality(quality).r#type(format).build().expect("[ManagedBrowser] Error with screenshot"));

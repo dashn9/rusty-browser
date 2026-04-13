@@ -92,7 +92,7 @@ pub enum AIProviderKind {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResolutionConfig {
     #[serde(default = "default_quality")]
-    pub quality: u32,
+    pub quality: f32,
 }
 
 impl Default for ResolutionConfig {
@@ -103,8 +103,8 @@ impl Default for ResolutionConfig {
     }
 }
 
-fn default_quality() -> u32 {
-    85
+fn default_quality() -> f32 {
+    0.85
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -136,8 +136,15 @@ impl RustyConfig {
         let content = std::fs::read_to_string(path)
             .map_err(|e| ConfigError::Read(e.to_string()))?;
         let content = substitute_env_vars(&content);
-        yaml_serde::from_str(&content)
-            .map_err(|e| ConfigError::Parse(e.to_string()))
+        let config: Self = yaml_serde::from_str(&content)
+            .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        let q = config.ai.resolution.quality;
+        if !(0.0..=1.0).contains(&q) {
+            return Err(ConfigError::Parse(format!(
+                "ai.resolution.quality must be between 0.0 and 1.0, got {q}"
+            )));
+        }
+        Ok(config)
     }
 }
 

@@ -13,7 +13,7 @@ ai:
   api_key: "your_openrouter_api_key"
   model: "anthropic/claude-sonnet-4-20250514"
   resolution:
-    quality: 85  # screenshot JPEG quality sent to the AI (1–100)
+    quality: 0.85  # screenshot JPEG quality sent to the AI (0.0–1.0)
 
 flux:
   base_url: "http://127.0.0.1:7227"

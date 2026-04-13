@@ -32,10 +32,7 @@ pub async fn run(
                 browser_id: browser_id.to_string(),
                 context_id: String::new(),
                 action: Some(rusty_proto::browser_command::Action::Screenshot(
-                    rusty_proto::Screenshot {
-                        quality: state.config.ai.resolution.quality,
-                        format: state.config.ai.resolution.format.clone(),
-                    },
+                    rusty_proto::Screenshot::default(),
                 )),
             }))
             .await
@@ -45,7 +42,7 @@ pub async fn run(
         let screenshot_data = result.screenshot
             .ok_or_else(|| AppError::Internal("No screenshot data in response".into()))?;
 
-        let processed = downscale(&screenshot_data.data, state.config.ai.resolution.max_width, state.config.ai.resolution.quality)?;
+        let processed = encode_screenshot(&screenshot_data.data, state.config.ai.resolution.quality)?;
         let screenshot_b64 = base64::engine::general_purpose::STANDARD.encode(&processed);
 
         let ai_response = state.ai_provider.analyze_screenshot(&screenshot_b64, instruction, &history).await?;
@@ -127,16 +124,10 @@ async fn dispatch_action(
     Ok(())
 }
 
-fn downscale(data: &[u8], max_width: u32, quality: u32) -> Result<Vec<u8>, AppError> {
+fn encode_screenshot(data: &[u8], quality: u32) -> Result<Vec<u8>, AppError> {
     if data.is_empty() { return Ok(data.to_vec()); }
     let img = image::load_from_memory(data)
         .map_err(|e| AppError::Internal(format!("Failed to decode screenshot: {e}")))?;
-    let img = if img.width() > max_width {
-        let ratio = max_width as f32 / img.width() as f32;
-        img.resize(max_width, (img.height() as f32 * ratio) as u32, image::imageops::FilterType::Lanczos3)
-    } else {
-        img
-    };
     let mut buf = std::io::Cursor::new(Vec::new());
     img.write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality as u8))
         .map_err(|e| AppError::Internal(format!("Failed to encode screenshot: {e}")))?;

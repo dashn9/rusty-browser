@@ -91,34 +91,20 @@ pub enum AIProviderKind {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResolutionConfig {
-    #[serde(default = "default_max_width")]
-    pub max_width: u32,
     #[serde(default = "default_quality")]
     pub quality: u32,
-    #[serde(default = "default_format")]
-    pub format: String,
 }
 
 impl Default for ResolutionConfig {
     fn default() -> Self {
         Self {
-            max_width: default_max_width(),
             quality: default_quality(),
-            format: default_format(),
         }
     }
 }
 
-fn default_max_width() -> u32 {
-    1280
-}
-
 fn default_quality() -> u32 {
     85
-}
-
-fn default_format() -> String {
-    "jpeg".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize)]

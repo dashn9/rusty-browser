@@ -55,8 +55,8 @@ pub async fn execute(browser: &mut ManagedBrowser, cmd: BrowserCommand) -> Resul
             let found = browser.wait_for_node(&w.selector, w.timeout_ms).await?;
             Ok(ok_with(found.to_string()))
         }
-        Some(Action::Screenshot(_)) => {
-            let b64 = browser.screenshot().await?;
+        Some(Action::Screenshot(sc)) => {
+            let b64 = browser.screenshot(sc.quality, &sc.format).await?;
             Ok(ok_with(b64))
         }
         Some(Action::ScrollBy(s)) => {

@@ -118,7 +118,7 @@ impl BrowserService {
     pub async fn screenshot(&self, execution_id: &str) -> Result<String, AppError> {
         let cmd_result = self.exec_inner(execution_id, "", Action::Screenshot(Screenshot {
             quality: self.state.config.ai.resolution.quality,
-            format: self.state.config.ai.resolution.format.clone(),
+            format: "jpeg".to_string(),
         })).await?;
         if cmd_result.result.is_empty() {
             return Err(AppError::Internal("agent returned empty screenshot".into()));
@@ -273,7 +273,6 @@ impl BrowserService {
     }
 }
 
-#[async_trait]
 impl AIInstructor for BrowserService {
     fn state(&self) -> &Arc<AppState> {
         &self.state

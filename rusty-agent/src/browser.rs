@@ -9,6 +9,7 @@ use rustenium::input::{KeyboardTypeOptionsBuilder, MouseClickOptions, MouseMoveO
 use rustenium::input::Mouse;
 use rustenium::nodes::Node;
 use rustenium_bidi_definitions::browsing_context::commands::CaptureScreenshotOrigin;
+use rustenium_bidi_definitions::browsing_context::type_builders::ImageFormatBuilder;
 use rustenium_identity::preset::get_by_id;
 use rustenium_identity::{IdentityConfig, IdentitySession};
 use rustenium_macros::css;
@@ -141,9 +142,10 @@ impl ManagedBrowser {
             .map_err(|e| BrowserError::Navigate(e.to_string()))
     }
 
-    pub async fn screenshot(&mut self) -> Result<String, BrowserError> {
+    pub async fn screenshot(&mut self, quality: u32, format: &str) -> Result<String, BrowserError> {
         let mut opts = BrowserScreenshotOptionsBuilder::default();
         opts = opts.origin(CaptureScreenshotOrigin::Document);
+        opts = opts.format(ImageFormatBuilder::default().quality(quality).r#type(format).build().expect("[ManagedBrowser] Error with screenshot"));
         self.session
             .browser_mut()
             .screenshot_with_options(opts.build())

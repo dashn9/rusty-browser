@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cargo build rusty-server",
+      "type": "shell",
+      "command": "cargo build --bin=rusty --package=rusty-server",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": ["$rustc"]
+    }
+  ]
+}

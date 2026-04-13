@@ -96,7 +96,7 @@ impl InitializeService {
     async fn download_agent(&self, version: &str, filename: &str) -> Result<Vec<u8>, AppError> {
         let base = self.state.config.flux.github_release_base_url
             .as_deref()
-            .unwrap_or("https://github.com/dashn9/rusty/releases/download");
+            .unwrap_or("https://github.com/dashn9/rusty-browser/releases/download");
 
         let url = format!("{base}/v{version}/{filename}");
         info!("GET {url}");

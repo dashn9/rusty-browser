@@ -1,5 +1,5 @@
 use anyhow::Result;
-use reqwest::Client;
+use reqwest::blocking::Client;
 use serde::de::DeserializeOwned;
 
 pub struct RustyClient {
@@ -17,59 +17,46 @@ impl RustyClient {
         }
     }
 
-    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .client
-            .get(format!("{}{path}", self.base_url))
-            .header("X-API-Key", &self.api_key)
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            anyhow::bail!("HTTP {status}: {text}");
-        }
-
-        Ok(resp.json().await?)
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base_url)
     }
 
-    pub async fn post<T: DeserializeOwned>(
-        &self,
-        path: &str,
-        body: &serde_json::Value,
-    ) -> Result<T> {
-        let resp = self
-            .client
-            .post(format!("{}{path}", self.base_url))
+    pub fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let resp = self.client.get(self.url(path))
+            .header("X-API-Key", &self.api_key)
+            .send()?;
+        self.parse(resp)
+    }
+
+    pub fn post<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+        let resp = self.client.post(self.url(path))
             .header("X-API-Key", &self.api_key)
             .json(body)
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            anyhow::bail!("HTTP {status}: {text}");
-        }
-
-        Ok(resp.json().await?)
+            .send()?;
+        self.parse(resp)
     }
 
-    pub async fn delete<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .client
-            .delete(format!("{}{path}", self.base_url))
+    pub fn put<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+        let resp = self.client.put(self.url(path))
             .header("X-API-Key", &self.api_key)
-            .send()
-            .await?;
+            .json(body)
+            .send()?;
+        self.parse(resp)
+    }
 
+    pub fn delete<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let resp = self.client.delete(self.url(path))
+            .header("X-API-Key", &self.api_key)
+            .send()?;
+        self.parse(resp)
+    }
+
+    fn parse<T: DeserializeOwned>(&self, resp: reqwest::blocking::Response) -> Result<T> {
         if !resp.status().is_success() {
             let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
+            let text = resp.text().unwrap_or_default();
             anyhow::bail!("HTTP {status}: {text}");
         }
-
-        Ok(resp.json().await?)
+        Ok(resp.json()?)
     }
 }

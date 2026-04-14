@@ -73,6 +73,21 @@ impl IntoResponse for AppError {
     }
 }
 
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppError::Storage(e) => write!(f, "storage error: {e}"),
+            AppError::Flux(e) => write!(f, "flux error: {e}"),
+            AppError::AI(e) => write!(f, "AI error: {e}"),
+            AppError::Grpc(e) => write!(f, "gRPC error: {e}"),
+            AppError::Browser(e) => write!(f, "browser error: {e}"),
+            AppError::Internal(msg) => write!(f, "internal error: {msg}"),
+            AppError::NotFound(id) => write!(f, "not found: {id}"),
+            AppError::Unauthorized => write!(f, "unauthorized"),
+        }
+    }
+}
+
 impl From<StorageError> for AppError {
     fn from(e: StorageError) -> Self { AppError::Storage(e) }
 }

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use base64::Engine;
 
 use rusty_common::ai::BrowserAction;
@@ -167,54 +166,69 @@ impl BrowserService {
             .map_err(|e| AppError::Internal(format!("Flux logs: {e}")))
     }
 
-    pub async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<(), AppError> {
-        let proto_action = match action {
-            BrowserAction::Navigate { url } => Action::Navigate(
-                Navigate { url: url.clone(), wait_until: "complete".to_string() },
-            ),
-            BrowserAction::Click { x, y, human } => Action::Click(
-                Click { x: Some(*x), y: Some(*y), human: *human },
-            ),
-            BrowserAction::NodeClick { selector, human } => Action::NodeClick(
-                NodeClick { selector: selector.clone(), human: *human },
-            ),
-            BrowserAction::Type { text, selector } => Action::TypeText(
-                Type { text: text.clone(), selector: selector.clone() },
-            ),
-            BrowserAction::MouseMove { x, y } => Action::MouseMove(
-                MouseMove { x: Some(*x), y: Some(*y), steps: 0 },
-            ),
-            BrowserAction::HumanMouseMove { x, y } => Action::HumanMouseMove(
-                HumanMouseMove { x: Some(*x), y: Some(*y) },
-            ),
-            BrowserAction::ScrollBy { y, human } => Action::ScrollBy(
-                ScrollBy { y: *y, human: *human },
-            ),
-            BrowserAction::ScrollTo { selector, human } => Action::ScrollTo(
-                ScrollTo { selector: selector.clone(), human: *human, to: 0 },
-            ),
-            BrowserAction::FetchHtml { selector } => Action::FetchHtml(
-                FetchHtml { selector: selector.clone() },
-            ),
-            BrowserAction::FetchText { selector } => Action::FetchText(
-                FetchText { selector: selector.clone() },
-            ),
-            BrowserAction::EvalJs { script } => Action::EvalJs(
-                EvalJs { script: script.clone() },
-            ),
-            BrowserAction::FindNode { selector } => Action::FindNode(
-                FindNode { selector: selector.clone() },
-            ),
-            BrowserAction::WaitForNode { selector, timeout_ms } => Action::WaitForNode(
-                WaitForNode { selector: selector.clone(), timeout_ms: *timeout_ms },
-            ),
+    pub async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<String, AppError> {
+        match action {
+            BrowserAction::Navigate { url } => {
+                self.exec(execution_id, "", Action::Navigate(Navigate { url: url.clone(), wait_until: "complete".to_string() })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::Click { x, y, human } => {
+                self.exec(execution_id, "", Action::Click(Click { x: Some(*x), y: Some(*y), human: *human })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::NodeClick { selector, human } => {
+                self.exec(execution_id, "", Action::NodeClick(NodeClick { selector: selector.clone(), human: *human })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::Type { text, selector } => {
+                self.exec(execution_id, "", Action::TypeText(Type { text: text.clone(), selector: selector.clone() })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::MouseMove { x, y } => {
+                self.exec(execution_id, "", Action::MouseMove(MouseMove { x: Some(*x), y: Some(*y), steps: 0 })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::HumanMouseMove { x, y } => {
+                self.exec(execution_id, "", Action::HumanMouseMove(HumanMouseMove { x: Some(*x), y: Some(*y) })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::ScrollBy { y, human } => {
+                self.exec(execution_id, "", Action::ScrollBy(ScrollBy { y: *y, human: *human })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::ScrollTo { selector, human, to } => {
+                self.exec(execution_id, "", Action::ScrollTo(ScrollTo { selector: selector.clone(), human: *human, to: *to })).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::FetchHtml { selector } => {
+                let r = self.exec_inner(execution_id, "", Action::FetchHtml(FetchHtml { selector: selector.clone() })).await?;
+                Ok(r.result)
+            }
+            BrowserAction::FetchText { selector } => {
+                let r = self.exec_inner(execution_id, "", Action::FetchText(FetchText { selector: selector.clone() })).await?;
+                Ok(r.result)
+            }
+            BrowserAction::EvalJs { script } => {
+                let r = self.exec_inner(execution_id, "", Action::EvalJs(EvalJs { script: script.clone() })).await?;
+                Ok(r.result)
+            }
+            BrowserAction::FindNode { selector } => {
+                let r = self.exec_inner(execution_id, "", Action::FindNode(FindNode { selector: selector.clone() })).await?;
+                Ok(r.result)
+            }
+            BrowserAction::WaitForNode { selector, timeout_ms } => {
+                let r = self.exec_inner(execution_id, "", Action::WaitForNode(WaitForNode { selector: selector.clone(), timeout_ms: *timeout_ms })).await?;
+                Ok(r.result)
+            }
             BrowserAction::Wait { ms } => {
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
-                return Ok(());
+                Ok("ok".to_string())
             }
-            BrowserAction::Screenshot | BrowserAction::Done { .. } => return Ok(()),
-        };
-        self.exec(execution_id, "", proto_action).await
+            BrowserAction::Screenshot => {
+                BrowserService::screenshot(self, execution_id).await
+            }
+            BrowserAction::Done { .. } => Ok("ok".to_string()),
+        }
     }
 
     async fn exec(&self, execution_id: &str, context_id: &str, action: Action) -> Result<(), AppError> {
@@ -278,15 +292,7 @@ impl AIInstructor for BrowserService {
         &self.state
     }
 
-    async fn screenshot(&self, execution_id: &str) -> Result<Option<Vec<u8>>, AppError> {
-        let b64 = BrowserService::screenshot(self, execution_id).await?;
-        base64::engine::general_purpose::STANDARD
-            .decode(&b64)
-            .map(Some)
-            .map_err(|e| AppError::Internal(format!("Screenshot decode: {e}")))
-    }
-
-    async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<(), AppError> {
+    async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<String, AppError> {
         BrowserService::dispatch(self, execution_id, action).await
     }
 }

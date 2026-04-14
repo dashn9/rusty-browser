@@ -21,6 +21,9 @@ flux:
   function_name: "rusty-agent"
   # pending_timeout_secs: 10  # how long to wait for an agent to register before cancelling it
 
+deployment:
+  agent_os_target: "linux"  # linux or windows
+
 # proxy_file: "agent-proxies.yaml"  # bundled into agent zip at initialization
 
 # agent_env:

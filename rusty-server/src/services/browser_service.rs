@@ -273,12 +273,12 @@ impl BrowserService {
                 Ok(ch) => return Ok(GrpcClient::new(ch)),
                 Err(e) => {
                     if attempt + 1 == MAX_RETRIES {
-                        tracing::warn!("Connect exhausted for {}, removing: {e}", browser.execution_id);
+                        tracing::warn!("Connect exhausted for {} ({}), removing: {e}", browser.execution_id, addr);
                         let _ = self.state.redis.clear_instruct(&browser.execution_id).await;
                         let _ = self.state.redis.remove_browser(&browser.execution_id).await;
-                        return Err(AppError::Internal(format!("Connect: {e}")));
+                        return Err(AppError::Internal(format!("Connect {addr}: {e}")));
                     }
-                    tracing::warn!("Connect attempt {} failed for {}: {e}", attempt + 1, browser.execution_id);
+                    tracing::warn!("Connect attempt {} failed for {} ({}): {e}", attempt + 1, browser.execution_id, addr);
                     tokio::time::sleep(RETRY_DELAY).await;
                 }
             }

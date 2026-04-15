@@ -6,6 +6,7 @@ use crate::error::AgentError;
 pub type Result<T> = std::result::Result<T, AgentError>;
 
 pub async fn execute(browser: &mut ManagedBrowser, cmd: BrowserCommand) -> Result<CommandResult> {
+    tracing::info!("execute: {:?}", cmd.action);
     match cmd.action {
         Some(Action::Navigate(nav)) => {
             browser.navigate(&nav.url, &nav.wait_until).await?;
@@ -40,7 +41,10 @@ pub async fn execute(browser: &mut ManagedBrowser, cmd: BrowserCommand) -> Resul
             Ok(ok())
         }
         Some(Action::CloseBrowser(_)) => {
-            // browser.close().await;
+            // Handled directly in server.rs before reaching execute() —
+            // close() consumes ManagedBrowser by value, which isn't possible
+            // here since execute() only holds &mut. The server takes ownership
+            // via Option::take(), calls close(), then exits.
             std::process::exit(0);
         }
         Some(Action::EvalJs(e)) => {

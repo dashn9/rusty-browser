@@ -8,6 +8,7 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tracing::info;
 
 use rusty_proto::browser_agent_server::{BrowserAgent, BrowserAgentServer};
+use rusty_proto::browser_command::Action;
 use rusty_proto::master_client::MasterClient;
 use rusty_proto::{BrowserCommand, CommandResult, RegisterAgentRequest};
 
@@ -16,7 +17,7 @@ use crate::error::{GrpcError, TlsError};
 use crate::executor;
 
 struct BrowserAgentService {
-    browser: Arc<Mutex<ManagedBrowser>>,
+    browser: Arc<Mutex<Option<ManagedBrowser>>>,
 }
 
 #[tonic::async_trait]
@@ -26,8 +27,19 @@ impl BrowserAgent for BrowserAgentService {
         request: Request<BrowserCommand>,
     ) -> Result<Response<CommandResult>, Status> {
         let cmd = request.into_inner();
-        let mut browser = self.browser.lock().await;
-        let result = executor::execute(&mut *browser, cmd).await.unwrap_or_else(|e| CommandResult {
+
+        if matches!(cmd.action, Some(Action::CloseBrowser(_))) {
+            info!("CloseBrowser received — closing browser");
+            let browser = self.browser.lock().await.take();
+            if let Some(b) = browser {
+                b.close().await;
+            }
+            std::process::exit(0);
+        }
+
+        let mut guard = self.browser.lock().await;
+        let browser = guard.as_mut().ok_or_else(|| Status::unavailable("browser is closed"))?;
+        let result = executor::execute(browser, cmd).await.unwrap_or_else(|e| CommandResult {
             success: false,
             error_message: e.to_string(),
             result: String::new(),
@@ -66,7 +78,6 @@ pub async fn serve(
     };
     let browser_id_owned = browser_id.to_string();
     let (master, master_tls) = if native_tls {
-        // Use system/native root CAs — lets the agent verify cert without bundled master.crt
         let tls = tonic::transport::ClientTlsConfig::new().with_native_roots();
         (master_url.to_string(), tls)
     } else {
@@ -97,7 +108,7 @@ pub async fn serve(
         .tls_config(tls)
         .map_err(|e| TlsError::Config(e.to_string()))?
         .add_service(BrowserAgentServer::new(BrowserAgentService {
-            browser: Arc::new(Mutex::new(browser)),
+            browser: Arc::new(Mutex::new(Some(browser))),
         }))
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await
@@ -105,4 +116,3 @@ pub async fn serve(
 
     Ok(())
 }
-

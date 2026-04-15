@@ -52,8 +52,8 @@ pub async fn serve(
 
     let listener = TcpListener::bind("0.0.0.0:0").await?;
     let grpc_port = listener.local_addr()?.port();
-    let private_ip = local_ip();
-    let public_ip = detect_public_ip().await.unwrap_or_else(|| private_ip.clone());
+    let private_ip = std::env::var("FLUX_NODE_PRIVATE_IP").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let public_ip = std::env::var("FLUX_NODE_PUBLIC_IP").unwrap_or_else(|_| private_ip.clone());
 
     info!("Browser agent {browser_id} listening on {public_ip}/{private_ip}:{grpc_port} (TLS)");
 
@@ -106,24 +106,3 @@ pub async fn serve(
     Ok(())
 }
 
-async fn detect_public_ip() -> Option<String> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let mut stream = tokio::net::TcpStream::connect("api.ipify.org:80").await.ok()?;
-    stream.write_all(b"GET / HTTP/1.0\r\nHost: api.ipify.org\r\n\r\n").await.ok()?;
-    let mut buf = Vec::new();
-    stream.read_to_end(&mut buf).await.ok()?;
-    let response = String::from_utf8(buf).ok()?;
-    response.split("\r\n\r\n").nth(1).map(|s| s.trim().to_string())
-}
-
-/// Determine the outbound IP by opening a UDP socket toward a public address.
-/// No packets are sent — this just reveals which local interface would be used.
-fn local_ip() -> String {
-    std::net::UdpSocket::bind("0.0.0.0:0")
-        .and_then(|s| { s.connect("8.8.8.8:80")?; s.local_addr() })
-        .map(|a| a.ip().to_string())
-        .unwrap_or_else(|_| {
-            tracing::warn!("Could not determine local IP, falling back to 127.0.0.1");
-            "127.0.0.1".to_string()
-        })
-}

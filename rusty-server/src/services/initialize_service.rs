@@ -48,14 +48,14 @@ impl InitializeService {
         flux.initialize().await?;
         info!("Flux initialized");
 
+        let version = "0.1.0";
+        let filename = self.state.config.deployment.agent_os_target.binary_name();
+
         info!("Registering function '{function_name}'…");
         let browser_config_json = self.get_browser_config_json();
-        let function_yaml = build_function_yaml(&function_name, &browser_config_json, &self.state.config.agent_env)?;
+        let function_yaml = build_function_yaml(&function_name, filename, &browser_config_json, &self.state.config.agent_env)?;
         flux.register_function(&function_yaml).await?;
         info!("Function '{function_name}' registered");
-
-        let version = "0.1.0";
-        let filename = "rusty-agent";
         info!("Downloading {filename}…");
         let agent_bytes = self.download_agent(version, filename).await?;
         info!("Downloaded {} byte(s)", agent_bytes.len());
@@ -122,6 +122,7 @@ impl InitializeService {
 
 fn build_function_yaml(
     name: &str,
+    handler: &str,
     browser_config_json: &Option<String>,
     agent_env: &std::collections::HashMap<String, String>,
 ) -> Result<String, AppError> {
@@ -143,7 +144,7 @@ fn build_function_yaml(
 
     let spec = FunctionSpec {
         name: name.to_string(),
-        handler: name.to_string(),
+        handler: handler.to_string(),
         resources: Resources { cpu: 1, memory: 2048 },
         timeout: 0,
         max_concurrency: 200,

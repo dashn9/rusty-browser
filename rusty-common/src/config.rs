@@ -17,6 +17,8 @@ pub struct RustyConfig {
     /// Extra environment variables injected into the agent function spec.
     #[serde(default)]
     pub agent_env: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub deployment: DeploymentConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -129,6 +131,29 @@ fn default_proxy_file() -> String {
 
 fn default_function_name() -> String {
     "rusty-agent".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct DeploymentConfig {
+    #[serde(default)]
+    pub agent_os_target: AgentOsTarget,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentOsTarget {
+    #[default]
+    Linux,
+    Windows,
+}
+
+impl AgentOsTarget {
+    pub fn binary_name(&self) -> &'static str {
+        match self {
+            AgentOsTarget::Linux => "rusty-agent",
+            AgentOsTarget::Windows => "rusty-agent.exe",
+        }
+    }
 }
 
 impl RustyConfig {

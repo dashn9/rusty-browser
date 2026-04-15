@@ -24,7 +24,7 @@ env:
 
 jobs:
   release_agent:
-    name: Release rusty-agent
+    name: Release rusty-agent (Linux)
     runs-on: ubuntu-22.04
     if: contains(inputs.packages, 'rusty-agent')
     permissions:

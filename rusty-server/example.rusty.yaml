@@ -20,6 +20,7 @@ flux:
   api_key: "your_flux_api_key"
   function_name: "rusty-agent"
   # pending_timeout_secs: 10  # how long to wait for an agent to register before cancelling it
+  # local_binary: "cargo run -p rusty-agent --"  # spawn agent locally instead of Flux; omit to use Flux
 
 deployment:
   agent_os_target: "linux"  # linux or windows

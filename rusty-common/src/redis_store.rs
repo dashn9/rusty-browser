@@ -134,12 +134,6 @@ impl RedisStore {
         Ok(browsers)
     }
 
-    pub async fn update_browser_state(&self, execution_id: &str, state: &BrowserState) -> Result<(), StorageError> {
-        let mut conn = self.conn.clone();
-        let _: () = conn.hset(self.key(&["browser", execution_id]), "state", state.as_str()).await?;
-        Ok(())
-    }
-
     pub async fn remove_browser(&self, execution_id: &str) -> Result<(), StorageError> {
         let mut conn = self.conn.clone();
         // SREM/DEL/ZREM all return 0 (not an error) when the key or member is absent,
@@ -208,53 +202,4 @@ impl RedisStore {
         })
     }
 
-    // --- Instruct state ---
-
-    pub async fn set_instruct_state(
-        &self,
-        execution_id: &str,
-        status: &str,
-        step: u32,
-        max_steps: u32,
-        instruction: &str,
-        reasoning: &str,
-    ) -> Result<(), StorageError> {
-        let mut conn = self.conn.clone();
-        let _: () = conn.hset_multiple(self.key(&["instruct", execution_id]), &[
-            ("status", status),
-            ("current_step", &step.to_string()),
-            ("max_steps", &max_steps.to_string()),
-            ("instruction", instruction),
-            ("last_reasoning", reasoning),
-        ]).await?;
-        Ok(())
-    }
-
-    pub async fn get_instruct_state(
-        &self,
-        execution_id: &str,
-    ) -> Result<Option<std::collections::HashMap<String, String>>, StorageError> {
-        let mut conn = self.conn.clone();
-        let key = self.key(&["instruct", execution_id]);
-        let exists: bool = conn.exists(&key).await?;
-        if !exists { return Ok(None); }
-        Ok(Some(conn.hgetall(&key).await?))
-    }
-
-    pub async fn push_instruct_history(&self, execution_id: &str, message_json: &str) -> Result<(), StorageError> {
-        let mut conn = self.conn.clone();
-        // RPUSH — append to the right end of the list, preserving chronological order
-        let _: () = conn.rpush(self.key(&["instruct", execution_id, "history"]), message_json).await?;
-        Ok(())
-    }
-
-    pub async fn clear_instruct(&self, execution_id: &str) -> Result<(), StorageError> {
-        let mut conn = self.conn.clone();
-        redis::pipe()
-            .del(self.key(&["instruct", execution_id]))
-            .del(self.key(&["instruct", execution_id, "history"]))
-            .exec_async(&mut conn)
-            .await?;
-        Ok(())
-    }
 }

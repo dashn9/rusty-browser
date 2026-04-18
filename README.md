@@ -100,13 +100,16 @@ Most browser automation tools treat the browser as a local subprocess. That work
 |--------|------|-------------|
 | `POST` | `/browsers/{id}/navigate/` | Navigate to a URL |
 | `POST` | `/browsers/{id}/click/` | Click at coordinates |
-| `POST` | `/browsers/{id}/node-click/` | Click a CSS selector |
-| `POST` | `/browsers/{id}/type/` | Type text (optionally into a selector) |
+| `POST` | `/browsers/{id}/node-click/` | Click a DOM node by node_id |
+| `POST` | `/browsers/{id}/type/` | Type text (optionally into a node_id) |
 | `POST` | `/browsers/{id}/scroll-by/` | Scroll by Y pixels |
-| `POST` | `/browsers/{id}/scroll-to/` | Scroll a selector into view |
-| `POST` | `/browsers/{id}/screenshot/` | Capture a base64 screenshot |
-| `POST` | `/browsers/{id}/fetch-html/` | Fetch inner HTML of a selector |
-| `POST` | `/browsers/{id}/fetch-text/` | Fetch inner text of a selector |
+| `POST` | `/browsers/{id}/scroll-to/` | Scroll a node_id into view |
+| `POST` | `/browsers/{id}/screenshot/` | Capture a base64 JPEG screenshot |
+| `POST` | `/browsers/{id}/fetch-html/` | Fetch inner HTML of a node_id (or full page) |
+| `POST` | `/browsers/{id}/fetch-text/` | Fetch inner text of a node_id |
+| `POST` | `/browsers/{id}/find-node/` | Find a node by CSS selector, returns node_id |
+| `POST` | `/browsers/{id}/wait-for-node/` | Wait for a CSS selector, returns node_id |
+| `GET` | `/browsers/{id}/ui-map/` | Get accessible UI node tree |
 | `POST` | `/browsers/{id}/eval/` | Evaluate JavaScript |
 | `POST` | `/browsers/{id}/instruct/` | Run a natural language instruction |
 | `GET` | `/browsers/{id}/logs/` | Fetch execution logs from Flux |
@@ -121,6 +124,21 @@ Start the server:
 
 ```sh
 RUSTY_CONFIG=rusty.yaml cargo run --release --bin rusty
+```
+
+### Local development (no Flux)
+
+Set `flux.local_binary` in your config to spawn agents as local subprocesses instead of deploying via Flux. Agent stdout/stderr is forwarded through the server's tracing output, prefixed with the execution ID.
+
+```yaml
+flux:
+  local_binary: "cargo run -p rusty-agent --"  # or path to a built binary
+```
+
+Agent logs are emitted under the `rusty_agent` target and can be filtered independently:
+
+```sh
+RUST_LOG=rusty=info,rusty_agent=debug cargo run -p rusty-server
 ```
 
 ---

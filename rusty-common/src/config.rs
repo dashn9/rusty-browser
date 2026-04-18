@@ -121,6 +121,9 @@ pub struct FluxConfig {
     pub github_release_base_url: Option<String>,
     #[serde(default = "default_pending_timeout_secs")]
     pub pending_timeout_secs: u64,
+    /// If set, spawn the agent as a local subprocess instead of calling Flux (dev/testing only).
+    #[serde(default)]
+    pub local_binary: Option<String>,
 }
 
 fn default_pending_timeout_secs() -> u64 { 10 }

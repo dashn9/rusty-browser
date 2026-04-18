@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use base64::Engine;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use uuid::Uuid;
 
 use rusty_common::ai::BrowserAction;
 use rusty_common::error::BrowserError;
@@ -24,8 +26,8 @@ impl BrowserService {
         Self { state }
     }
 
-    /// Spawns a new agent via Flux. Returns the execution_id — the agent registers back
-    /// via gRPC with its browser_id and connection details.
+    /// Spawns a new agent via Flux (or locally if `flux.local_binary` is set).
+    /// Returns the execution_id — the agent registers back via gRPC.
     pub async fn create_browser(&self, identity: Option<serde_json::Value>) -> Result<String, AppError> {
         let master_url = self.state.config.server.grpc_server_url.clone().unwrap_or_else(|| {
             format!(
@@ -34,14 +36,25 @@ impl BrowserService {
                 self.state.config.server.grpc_port.expect("grpc_port resolved at startup"),
             )
         });
+
+        if let Some(ref binary) = self.state.config.flux.local_binary {
+            let execution_id = format!("test-{}", Uuid::new_v4());
+            self.state.redis.store_pending_execution(&execution_id).await?;
+            spawn_local_agent(binary, &execution_id, &master_url).await?;
+            tracing::info!("local agent spawned execution_id={execution_id}");
+            return Ok(execution_id);
+        }
+
         // master_url is argv[1]; any identity args follow
         let mut args = vec![master_url.clone()];
         if self.state.config.server.grpc_server_url.is_some() {
             args.push("--native-tls".to_string());
         }
         args.extend(identity.into_iter().map(|v| v.to_string()));
+        tracing::info!("spawning agent master_url={master_url}");
         let execution_id = self.state.flux.spawn_agent(&self.state.config.flux.function_name, &args).await?;
         self.state.redis.store_pending_execution(&execution_id).await?;
+        tracing::info!("agent spawned execution_id={execution_id}");
         Ok(execution_id)
     }
 
@@ -55,10 +68,11 @@ impl BrowserService {
     }
 
     pub async fn delete_browser(&self, execution_id: &str) -> Result<(), AppError> {
+        tracing::info!("delete execution_id={execution_id}");
         // Agent calls process::exit(0) on CloseBrowser — it may exit before replying
         let _ = self.exec(execution_id, "", Action::CloseBrowser(CloseBrowser {})).await;
-        let _ = self.state.redis.clear_instruct(execution_id).await;
         self.state.redis.remove_browser(execution_id).await?;
+        tracing::info!("deleted execution_id={execution_id}");
         Ok(())
     }
 
@@ -110,8 +124,8 @@ impl BrowserService {
         self.exec(execution_id, "", Action::Click(Click { x: Some(x), y: Some(y), human })).await
     }
 
-    pub async fn type_text(&self, execution_id: &str, text: String, selector: Option<String>) -> Result<(), AppError> {
-        self.exec(execution_id, "", Action::TypeText(Type { text, selector })).await
+    pub async fn type_text(&self, execution_id: &str, text: String, node_id: Option<i64>) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::TypeText(Type { text, node_id })).await
     }
 
     pub async fn screenshot(&self, execution_id: &str) -> Result<String, AppError> {
@@ -125,17 +139,17 @@ impl BrowserService {
         Ok(cmd_result.result)
     }
 
-    pub async fn node_click(&self, execution_id: &str, selector: String, human: bool) -> Result<(), AppError> {
-        self.exec(execution_id, "", Action::NodeClick(NodeClick { selector, human })).await
+    pub async fn node_click(&self, execution_id: &str, node_id: i64, human: bool) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::NodeClick(NodeClick { node_id, human })).await
     }
 
-    pub async fn fetch_html(&self, execution_id: &str, selector: Option<String>) -> Result<String, AppError> {
-        let r = self.exec_inner(execution_id, "", Action::FetchHtml(FetchHtml { selector })).await?;
+    pub async fn fetch_html(&self, execution_id: &str, node_id: Option<i64>) -> Result<String, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::FetchHtml(FetchHtml { node_id })).await?;
         Ok(r.result)
     }
 
-    pub async fn fetch_text(&self, execution_id: &str, selector: String) -> Result<String, AppError> {
-        let r = self.exec_inner(execution_id, "", Action::FetchText(FetchText { selector })).await?;
+    pub async fn fetch_text(&self, execution_id: &str, node_id: i64) -> Result<String, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::FetchText(FetchText { node_id })).await?;
         Ok(r.result)
     }
 
@@ -148,8 +162,8 @@ impl BrowserService {
         self.exec(execution_id, "", Action::ScrollBy(ScrollBy { y, human })).await
     }
 
-    pub async fn scroll_to(&self, execution_id: &str, selector: String, human: bool, to: u32) -> Result<(), AppError> {
-        self.exec(execution_id, "", Action::ScrollTo(ScrollTo { selector, human, to })).await
+    pub async fn scroll_to(&self, execution_id: &str, node_id: i64, human: bool, to: u32) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::ScrollTo(ScrollTo { node_id, human, to })).await
     }
 
     pub async fn teardown(&self) -> Result<serde_json::Value, AppError> {
@@ -159,6 +173,22 @@ impl BrowserService {
             "browsers": browsers,
             "nodes_terminated": nodes_terminated,
         }))
+    }
+
+    pub async fn find_node(&self, execution_id: &str, selector: String) -> Result<i64, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::FindNode(FindNode { selector })).await?;
+        r.result.parse::<i64>().map_err(|e| AppError::Internal(format!("node_id parse: {e}")))
+    }
+
+    pub async fn wait_for_node(&self, execution_id: &str, selector: String, timeout_ms: u64) -> Result<i64, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::WaitForNode(WaitForNode { selector, timeout_ms })).await?;
+        r.result.parse::<i64>().map_err(|e| AppError::Internal(format!("node_id parse: {e}")))
+    }
+
+    pub async fn get_ui_map(&self, execution_id: &str) -> Result<Vec<rusty_common::ui_map::UiNode>, AppError> {
+        let r = self.exec_inner(execution_id, "", Action::GetUiMap(GetUiMap {})).await?;
+        serde_json::from_str(&r.result)
+            .map_err(|e| AppError::Internal(format!("ui_map parse: {e}")))
     }
 
     pub async fn get_execution_logs(&self, execution_id: &str) -> Result<String, AppError> {
@@ -176,12 +206,12 @@ impl BrowserService {
                 self.exec(execution_id, "", Action::Click(Click { x: Some(*x), y: Some(*y), human: *human })).await?;
                 Ok("ok".to_string())
             }
-            BrowserAction::NodeClick { selector, human } => {
-                self.exec(execution_id, "", Action::NodeClick(NodeClick { selector: selector.clone(), human: *human })).await?;
+            BrowserAction::NodeClick { node_id, human } => {
+                self.exec(execution_id, "", Action::NodeClick(NodeClick { node_id: *node_id, human: *human })).await?;
                 Ok("ok".to_string())
             }
-            BrowserAction::Type { text, selector } => {
-                self.exec(execution_id, "", Action::TypeText(Type { text: text.clone(), selector: selector.clone() })).await?;
+            BrowserAction::Type { text, node_id } => {
+                self.exec(execution_id, "", Action::TypeText(Type { text: text.clone(), node_id: *node_id })).await?;
                 Ok("ok".to_string())
             }
             BrowserAction::MouseMove { x, y } => {
@@ -196,16 +226,16 @@ impl BrowserService {
                 self.exec(execution_id, "", Action::ScrollBy(ScrollBy { y: *y, human: *human })).await?;
                 Ok("ok".to_string())
             }
-            BrowserAction::ScrollTo { selector, human, to } => {
-                self.exec(execution_id, "", Action::ScrollTo(ScrollTo { selector: selector.clone(), human: *human, to: *to })).await?;
+            BrowserAction::ScrollTo { node_id, human, to } => {
+                self.exec(execution_id, "", Action::ScrollTo(ScrollTo { node_id: *node_id, human: *human, to: *to })).await?;
                 Ok("ok".to_string())
             }
-            BrowserAction::FetchHtml { selector } => {
-                let r = self.exec_inner(execution_id, "", Action::FetchHtml(FetchHtml { selector: selector.clone() })).await?;
+            BrowserAction::FetchHtml { node_id } => {
+                let r = self.exec_inner(execution_id, "", Action::FetchHtml(FetchHtml { node_id: *node_id })).await?;
                 Ok(r.result)
             }
-            BrowserAction::FetchText { selector } => {
-                let r = self.exec_inner(execution_id, "", Action::FetchText(FetchText { selector: selector.clone() })).await?;
+            BrowserAction::FetchText { node_id } => {
+                let r = self.exec_inner(execution_id, "", Action::FetchText(FetchText { node_id: *node_id })).await?;
                 Ok(r.result)
             }
             BrowserAction::EvalJs { script } => {
@@ -214,11 +244,11 @@ impl BrowserService {
             }
             BrowserAction::FindNode { selector } => {
                 let r = self.exec_inner(execution_id, "", Action::FindNode(FindNode { selector: selector.clone() })).await?;
-                Ok(r.result)
+                Ok(r.result)  // node_id as decimal string
             }
             BrowserAction::WaitForNode { selector, timeout_ms } => {
                 let r = self.exec_inner(execution_id, "", Action::WaitForNode(WaitForNode { selector: selector.clone(), timeout_ms: *timeout_ms })).await?;
-                Ok(r.result)
+                Ok(r.result)  // node_id as decimal string
             }
             BrowserAction::Wait { ms } => {
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
@@ -226,6 +256,10 @@ impl BrowserService {
             }
             BrowserAction::Screenshot => {
                 BrowserService::screenshot(self, execution_id).await
+            }
+            BrowserAction::GetUiMap => {
+                let r = self.exec_inner(execution_id, "", Action::GetUiMap(GetUiMap {})).await?;
+                Ok(r.result)
             }
             BrowserAction::Done { .. } => Ok("ok".to_string()),
         }
@@ -237,16 +271,20 @@ impl BrowserService {
 
     async fn exec_inner(&self, execution_id: &str, context_id: &str, action: Action) -> Result<CommandResult, AppError> {
         let browser = self.get_browser(execution_id).await?;
-        self.connect(&browser).await?
+        tracing::debug!("exec execution_id={execution_id} action={:?}", action);
+        let result = self.connect(&browser).await?
             .execute(tonic::Request::new(BrowserCommand {
-                // browser_id identifies the browser on the agent side
                 browser_id: browser.browser_id.clone(),
                 context_id: context_id.to_string(),
                 action: Some(action),
             }))
             .await
             .map(|r| r.into_inner())
-            .map_err(|e| AppError::Internal(format!("gRPC: {e}")))
+            .map_err(|e| AppError::Internal(format!("gRPC: {e}")))?;
+        if !result.success {
+            tracing::error!("exec failed execution_id={execution_id}: {}", result.error_message);
+        }
+        Ok(result)
     }
 
     async fn connect(&self, browser: &BrowserInfo) -> Result<GrpcClient, AppError> {
@@ -274,7 +312,6 @@ impl BrowserService {
                 Err(e) => {
                     if attempt + 1 == MAX_RETRIES {
                         tracing::warn!("Connect exhausted for {} ({}), removing: {e}", browser.execution_id, addr);
-                        let _ = self.state.redis.clear_instruct(&browser.execution_id).await;
                         let _ = self.state.redis.remove_browser(&browser.execution_id).await;
                         return Err(AppError::Internal(format!("Connect {addr}: {e}")));
                     }
@@ -285,6 +322,47 @@ impl BrowserService {
         }
         unreachable!()
     }
+}
+
+async fn spawn_local_agent(binary: &str, execution_id: &str, master_url: &str) -> Result<(), AppError> {
+    let mut parts = binary.split_whitespace();
+    let program = parts.next()
+        .ok_or_else(|| AppError::Internal("flux.local_binary is empty".into()))?;
+    let mut cmd = Command::new(program);
+    cmd.args(parts);
+    cmd.arg(master_url);
+    cmd.env("FLUX_EXECUTION_ID", execution_id);
+    cmd.env("FLUX_NODE_PRIVATE_IP", "127.0.0.1");
+    cmd.env("FLUX_NODE_PUBLIC_IP", "127.0.0.1");
+    cmd.env("RUSTY_CERT_DIR", std::env::temp_dir());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn()
+        .map_err(|e| AppError::Internal(format!("local agent spawn: {e}")))?;
+
+    let id = execution_id.to_string();
+    if let Some(stdout) = child.stdout.take() {
+        let id2 = id.clone();
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                tracing::info!(target: "rusty_agent", "[{id2}] {line}");
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(stderr).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                tracing::info!(target: "rusty_agent", "[{id}] {line}");
+            }
+        });
+    }
+
+    // Detach — child lives until agent calls process::exit(0) on CloseBrowser
+    std::mem::forget(child);
+    Ok(())
 }
 
 impl AIInstructor for BrowserService {

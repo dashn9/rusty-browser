@@ -31,6 +31,15 @@ impl Message {
         }
     }
 
+    pub fn user(text: &str) -> Self {
+        Self {
+            role: "user".to_string(),
+            content: Some(json!(text)),
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
     pub fn user_with_screenshot(instruction: &str, screenshot_b64: &str) -> Self {
         Self {
             role: "user".to_string(),
@@ -76,14 +85,14 @@ impl Message {
 
 // ---------- Tool calls ----------
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ToolCall {
     pub id: String,
     pub r#type: String,
     pub function: ToolCallFunction,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ToolCallFunction {
     pub name: String,
     pub arguments: String,
@@ -139,13 +148,13 @@ pub fn browser_tools() -> Vec<Tool> {
             r#type: "function",
             function: ToolDef {
                 name: "node_click",
-                description: "Click a DOM element by CSS selector",
+                description: "Click a DOM element by node_id returned from find_node or wait_for_node",
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "selector": { "type": "string" }
+                        "node_id": { "type": "integer" }
                     },
-                    "required": ["selector"]
+                    "required": ["node_id"]
                 }),
             },
         },
@@ -153,12 +162,12 @@ pub fn browser_tools() -> Vec<Tool> {
             r#type: "function",
             function: ToolDef {
                 name: "type",
-                description: "Type text, optionally into a specific input element",
+                description: "Type text, optionally into a specific input element identified by node_id",
                 parameters: json!({
                     "type": "object",
                     "properties": {
                         "text": { "type": "string" },
-                        "selector": { "type": "string", "description": "CSS selector of the input (omit to type at current focus)" }
+                        "node_id": { "type": "integer", "description": "node_id from find_node (omit to type at current focus)" }
                     },
                     "required": ["text"]
                 }),
@@ -182,14 +191,14 @@ pub fn browser_tools() -> Vec<Tool> {
             r#type: "function",
             function: ToolDef {
                 name: "scroll_to",
-                description: "Scroll a DOM element into the viewport",
+                description: "Scroll a DOM element into the viewport by node_id",
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "selector": { "type": "string" },
+                        "node_id": { "type": "integer" },
                         "to": { "type": "integer", "description": "0 = align top, 100 = align bottom" }
                     },
-                    "required": ["selector", "to"]
+                    "required": ["node_id", "to"]
                 }),
             },
         },
@@ -197,11 +206,11 @@ pub fn browser_tools() -> Vec<Tool> {
             r#type: "function",
             function: ToolDef {
                 name: "fetch_html",
-                description: "Return the inner HTML of a DOM element",
+                description: "Return the inner HTML of a DOM element by node_id",
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "selector": { "type": "string", "description": "CSS selector (omit for full document body)" }
+                        "node_id": { "type": "integer", "description": "node_id from find_node (omit for full document body)" }
                     }
                 }),
             },
@@ -210,13 +219,13 @@ pub fn browser_tools() -> Vec<Tool> {
             r#type: "function",
             function: ToolDef {
                 name: "fetch_text",
-                description: "Return the visible text content of a DOM element",
+                description: "Return the visible text content of a DOM element by node_id",
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "selector": { "type": "string" }
+                        "node_id": { "type": "integer" }
                     },
-                    "required": ["selector"]
+                    "required": ["node_id"]
                 }),
             },
         },
@@ -237,21 +246,6 @@ pub fn browser_tools() -> Vec<Tool> {
         Tool {
             r#type: "function",
             function: ToolDef {
-                name: "wait_for_node",
-                description: "Wait until a CSS selector appears in the DOM",
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "selector": { "type": "string" },
-                        "timeout_ms": { "type": "integer" }
-                    },
-                    "required": ["selector", "timeout_ms"]
-                }),
-            },
-        },
-        Tool {
-            r#type: "function",
-            function: ToolDef {
                 name: "wait",
                 description: "Pause for a number of milliseconds",
                 parameters: json!({
@@ -261,6 +255,31 @@ pub fn browser_tools() -> Vec<Tool> {
                     },
                     "required": ["ms"]
                 }),
+            },
+        },
+        // TODO: mouse_move should be conditionally registered only when the target is a desktop browser.
+        // For smartphone/touch-emulated sessions, use scroll_by/scroll_to and tap actions instead.
+        Tool {
+            r#type: "function",
+            function: ToolDef {
+                name: "mouse_move",
+                description: "Move the mouse pointer to pixel coordinates without clicking",
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "x": { "type": "number" },
+                        "y": { "type": "number" }
+                    },
+                    "required": ["x", "y"]
+                }),
+            },
+        },
+        Tool {
+            r#type: "function",
+            function: ToolDef {
+                name: "get_ui_map",
+                description: "Get the accessible UI element tree of the page. Each node has an id (use directly for node operations), role, name, and optional value/properties.",
+                parameters: json!({ "type": "object", "properties": {} }),
             },
         },
         Tool {
@@ -295,19 +314,20 @@ pub fn browser_tools() -> Vec<Tool> {
 pub enum BrowserAction {
     Navigate { url: String },
     Click { x: f32, y: f32, human: bool },
-    NodeClick { selector: String, human: bool },
-    Type { text: String, selector: Option<String> },
+    NodeClick { node_id: i64, human: bool },
+    Type { text: String, node_id: Option<i64> },
     MouseMove { x: f32, y: f32 },
     HumanMouseMove { x: f32, y: f32 },
     ScrollBy { y: i32, human: bool },
-    ScrollTo { selector: String, human: bool, to: u32 },
-    FetchHtml { selector: Option<String> },
-    FetchText { selector: String },
+    ScrollTo { node_id: i64, human: bool, to: u32 },
+    FetchHtml { node_id: Option<i64> },
+    FetchText { node_id: i64 },
     EvalJs { script: String },
     FindNode { selector: String },
     WaitForNode { selector: String, timeout_ms: u64 },
     Wait { ms: u64 },
     Screenshot,
+    GetUiMap,
     Done { result: String },
 }
 
@@ -321,6 +341,12 @@ pub fn parse_action(call: &ToolCall) -> Result<BrowserAction, AIError> {
     match call.function.name.as_str() {
         "click" | "node_click" | "scroll_by" | "scroll_to" => {
             v["human"] = json!(true);
+        }
+        // mouse_move exposed as human_mouse_move — always natural movement
+        "mouse_move" => {
+            v["type"] = json!("human_mouse_move");
+            return serde_json::from_value(v)
+                .map_err(|e| AIError::InvalidResponse(format!("mouse_move: {e}")));
         }
         _ => {}
     }
@@ -341,17 +367,17 @@ pub(crate) struct ChatRequest {
     pub tool_choice: &'static str,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct AIChatResponse {
     pub choices: Vec<Choice>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct Choice {
     pub message: ResponseMessage,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct ResponseMessage {
     #[serde(default)]
     pub tool_calls: Vec<ToolCall>,

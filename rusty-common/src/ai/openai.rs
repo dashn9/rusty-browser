@@ -40,6 +40,8 @@ impl AIProvider for OpenAIProvider {
         let model = self.model.clone();
 
         Box::pin(async move {
+            tracing::debug!("chat model={model} messages={}", messages.len());
+
             let request = ChatRequest {
                 model,
                 messages,
@@ -56,6 +58,8 @@ impl AIProvider for OpenAIProvider {
                 .map_err(|e| AIError::RequestFailed(e.to_string()))?;
 
             let status = response.status();
+            tracing::debug!("response status={status}");
+
             if status == reqwest::StatusCode::UNAUTHORIZED {
                 return Err(AIError::Unauthorized);
             }
@@ -64,6 +68,7 @@ impl AIProvider for OpenAIProvider {
             }
             if !status.is_success() {
                 let body = response.text().await.unwrap_or_default();
+                tracing::error!("failed status={status}: {body}");
                 return Err(AIError::RequestFailed(format!("status {status}: {body}")));
             }
 
@@ -71,6 +76,7 @@ impl AIProvider for OpenAIProvider {
                 .json()
                 .await
                 .map_err(|e| AIError::InvalidResponse(e.to_string()))?;
+            tracing::debug!("response body={chat_response:?}");
 
             let tool_calls = chat_response
                 .choices
@@ -80,10 +86,10 @@ impl AIProvider for OpenAIProvider {
                 .ok_or_else(|| AIError::InvalidResponse("no choices in response".to_string()))?;
 
             if tool_calls.is_empty() {
-                return Err(AIError::InvalidResponse(
-                    "model returned no tool calls".to_string(),
-                ));
+                return Err(AIError::InvalidResponse("model returned no tool calls".to_string()));
             }
+
+            tracing::debug!("received {} tool call(s)", tool_calls.len());
 
             Ok(tool_calls)
         })

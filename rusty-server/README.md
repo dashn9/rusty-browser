@@ -29,37 +29,44 @@ Each browser agent owns exactly one browser instance. When spawned, Flux returns
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/browsers` | Spawn a new browser agent |
-| `GET` | `/browsers` | List all registered browsers |
-| `GET` | `/browsers/:id` | Get a browser by ID |
-| `DELETE` | `/browsers/:id` | Close and deregister a browser |
-| `POST` | `/browsers/:id/contexts` | Create a context on a browser |
-| `DELETE` | `/browsers/:id/contexts/:ctx_id` | Close a context |
-| `POST` | `/instruct` | Run an AI instruct task on a browser |
+| `PUT` | `/browsers/` | Spawn a new browser agent |
+| `GET` | `/browsers/` | List all registered browsers |
+| `DELETE` | `/browsers/` | Delete all browsers |
+| `DELETE` | `/teardown/` | Delete all browsers and terminate all Flux nodes |
+| `GET` | `/browsers/{id}/` | Get a browser by ID |
+| `DELETE` | `/browsers/{id}/` | Close and deregister a browser |
+| `PUT` | `/browsers/{id}/contexts/` | Create a context on a browser |
+| `DELETE` | `/browsers/{id}/contexts/{ctx_id}/` | Close a context |
+| `POST` | `/browsers/{id}/navigate/` | Navigate to a URL |
+| `POST` | `/browsers/{id}/click/` | Click at coordinates |
+| `POST` | `/browsers/{id}/node-click/` | Click a DOM node by node_id |
+| `POST` | `/browsers/{id}/type/` | Type text (optionally into a node_id) |
+| `POST` | `/browsers/{id}/scroll-by/` | Scroll by Y pixels |
+| `POST` | `/browsers/{id}/scroll-to/` | Scroll a node_id into view |
+| `POST` | `/browsers/{id}/screenshot/` | Capture a base64 JPEG screenshot |
+| `POST` | `/browsers/{id}/fetch-html/` | Fetch inner HTML of a node_id (or full page) |
+| `POST` | `/browsers/{id}/fetch-text/` | Fetch inner text of a node_id |
+| `POST` | `/browsers/{id}/find-node/` | Find a node by CSS selector, returns node_id |
+| `POST` | `/browsers/{id}/wait-for-node/` | Wait for a CSS selector, returns node_id |
+| `GET` | `/browsers/{id}/ui-map/` | Get accessible UI node tree |
+| `POST` | `/browsers/{id}/eval/` | Evaluate JavaScript |
+| `POST` | `/browsers/{id}/instruct/` | Run a natural language instruction |
+| `GET` | `/browsers/{id}/logs/` | Fetch execution logs from Flux |
 
 ## Configuration
 
-Set via `rusty.yaml` (path overridable with `RUSTY_CONFIG` env var):
+Set via `rusty.yaml` (path overridable with `RUSTY_CONFIG` env var). See [`example.rusty.yaml`](example.rusty.yaml) for a full annotated reference.
+
+### Local development (no Flux)
+
+Set `flux.local_binary` to spawn agents as local subprocesses instead of deploying via Flux:
 
 ```yaml
-server:
-  http_port: 8080
-  grpc_port: 50051
-
-redis:
-  url: redis://localhost:6379
-  key_prefix: rusty
-
 flux:
-  base_url: http://localhost:8090
-  api_key: ...
-  function_name: rusty-agent
-
-ai:
-  provider: ...
-
-min_browsers: 2
+  local_binary: "cargo run -p rusty-agent --"
 ```
+
+Agent stdout/stderr is forwarded through the server's tracing output under the `rusty_agent` target.
 
 ## Running
 

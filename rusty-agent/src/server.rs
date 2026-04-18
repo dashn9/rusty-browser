@@ -55,9 +55,10 @@ pub async fn serve(
     master_url: &str,
     native_tls: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let cert = std::fs::read_to_string("agent.crt")
+    let cert_dir = std::env::var("RUSTY_CERT_DIR").unwrap_or_else(|_| ".".to_string());
+    let cert = std::fs::read_to_string(format!("{cert_dir}/agent.crt"))
         .map_err(|e| TlsError::CertRead(e.to_string()))?;
-    let key = std::fs::read_to_string("agent.key")
+    let key = std::fs::read_to_string(format!("{cert_dir}/agent.key"))
         .map_err(|e| TlsError::KeyRead(e.to_string()))?;
     let tls = ServerTlsConfig::new()
         .identity(Identity::from_pem(&cert, &key));
@@ -81,7 +82,7 @@ pub async fn serve(
         let tls = tonic::transport::ClientTlsConfig::new().with_native_roots();
         (master_url.to_string(), tls)
     } else {
-        let cert = std::fs::read_to_string("master.crt")
+        let cert = std::fs::read_to_string(format!("{cert_dir}/master.crt"))
             .map_err(|e| TlsError::CertRead(format!("master.crt: {e}")))?;
         let tls = tonic::transport::ClientTlsConfig::new()
             .ca_certificate(tonic::transport::Certificate::from_pem(&cert))

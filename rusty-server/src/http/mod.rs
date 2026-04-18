@@ -34,6 +34,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/browsers/{execution_id}/node-click/", post(browsers::node_click))
         .route("/browsers/{execution_id}/fetch-html/", post(browsers::fetch_html))
         .route("/browsers/{execution_id}/fetch-text/", post(browsers::fetch_text))
+        .route("/browsers/{execution_id}/find-node/", post(browsers::find_node))
+        .route("/browsers/{execution_id}/wait-for-node/", post(browsers::wait_for_node))
+        .route("/browsers/{execution_id}/ui-map/", get(browsers::get_ui_map))
         .route("/browsers/{execution_id}/logs/", get(browsers::get_execution_logs))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

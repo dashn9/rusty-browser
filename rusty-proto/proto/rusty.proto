@@ -50,8 +50,11 @@ message BrowserCommand {
     ScrollTo scroll_to = 25;
     FetchHtml fetch_html = 26;
     FetchText fetch_text = 27;
+    GetUiMap get_ui_map = 28;
   }
 }
+
+message GetUiMap {}
 
 message Navigate {
   string url = 1;
@@ -65,13 +68,13 @@ message Click {
 }
 
 message NodeClick {
-  string selector = 1;
+  int64 node_id = 1;
   bool human = 2;
 }
 
 message Type {
   string text = 1;
-  optional string selector = 2;
+  optional int64 node_id = 2;
 }
 
 message MouseMove {
@@ -119,15 +122,15 @@ message ScrollBy {
 }
 
 message ScrollTo {
-  string selector = 1;
+  int64 node_id = 1;
   bool human = 2;
   uint32 to = 3; // 0 = top of element at viewport top, 100 = bottom of element at viewport bottom
 }
 
 message FetchHtml {
-  optional string selector = 1;
+  optional int64 node_id = 1;
 }
 
 message FetchText {
-  string selector = 1;
+  int64 node_id = 1;
 }

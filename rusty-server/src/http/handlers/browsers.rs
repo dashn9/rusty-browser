@@ -104,7 +104,7 @@ pub async fn click(
 #[derive(Deserialize)]
 pub struct TypeRequest {
     pub text: String,
-    pub selector: Option<String>,
+    pub node_id: Option<i64>,
 }
 
 pub async fn type_text(
@@ -112,7 +112,7 @@ pub async fn type_text(
     Path(execution_id): Path<String>,
     Json(req): Json<TypeRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).type_text(&execution_id, req.text, req.selector).await?;
+    svc(&state).type_text(&execution_id, req.text, req.node_id).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -155,7 +155,7 @@ pub async fn scroll_by(
 
 #[derive(Deserialize)]
 pub struct ScrollToRequest {
-    pub selector: String,
+    pub node_id: i64,
     pub human: Option<bool>,
     pub to: Option<u32>,
 }
@@ -165,7 +165,7 @@ pub async fn scroll_to(
     Path(execution_id): Path<String>,
     Json(req): Json<ScrollToRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).scroll_to(&execution_id, req.selector, req.human.unwrap_or(false), req.to.unwrap_or(0)).await?;
+    svc(&state).scroll_to(&execution_id, req.node_id, req.human.unwrap_or(false), req.to.unwrap_or(0)).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -178,14 +178,22 @@ pub async fn instruct(
     State(state): State<Arc<AppState>>,
     Path(execution_id): Path<String>,
     Json(req): Json<InstructRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).instruct(&execution_id, &req.instruction).await?;
-    Ok(Json(serde_json::json!({ "execution_id": execution_id, "status": "completed" })))
+) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    let svc = svc(&state);
+    // Verify the browser exists before accepting the job
+    svc.get_browser(&execution_id).await?;
+    let id = execution_id.clone();
+    tokio::spawn(async move {
+        if let Err(e) = svc.instruct(&id, &req.instruction).await {
+            tracing::error!("instruct {id} failed: {e}");
+        }
+    });
+    Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "execution_id": execution_id, "status": "running" }))))
 }
 
 #[derive(Deserialize)]
 pub struct NodeClickRequest {
-    pub selector: String,
+    pub node_id: i64,
     pub human: Option<bool>,
 }
 
@@ -194,13 +202,13 @@ pub async fn node_click(
     Path(execution_id): Path<String>,
     Json(req): Json<NodeClickRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).node_click(&execution_id, req.selector, req.human.unwrap_or(true)).await?;
+    svc(&state).node_click(&execution_id, req.node_id, req.human.unwrap_or(true)).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
 pub struct FetchHtmlRequest {
-    pub selector: Option<String>,
+    pub node_id: Option<i64>,
 }
 
 pub async fn fetch_html(
@@ -208,13 +216,13 @@ pub async fn fetch_html(
     Path(execution_id): Path<String>,
     Json(req): Json<FetchHtmlRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let html = svc(&state).fetch_html(&execution_id, req.selector).await?;
+    let html = svc(&state).fetch_html(&execution_id, req.node_id).await?;
     Ok(Json(serde_json::json!({ "html": html })))
 }
 
 #[derive(Deserialize)]
 pub struct FetchTextRequest {
-    pub selector: String,
+    pub node_id: i64,
 }
 
 pub async fn fetch_text(
@@ -222,8 +230,45 @@ pub async fn fetch_text(
     Path(execution_id): Path<String>,
     Json(req): Json<FetchTextRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let text = svc(&state).fetch_text(&execution_id, req.selector).await?;
+    let text = svc(&state).fetch_text(&execution_id, req.node_id).await?;
     Ok(Json(serde_json::json!({ "text": text })))
+}
+
+#[derive(Deserialize)]
+pub struct FindNodeRequest {
+    pub selector: String,
+}
+
+pub async fn find_node(
+    State(state): State<Arc<AppState>>,
+    Path(execution_id): Path<String>,
+    Json(req): Json<FindNodeRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let node_id = svc(&state).find_node(&execution_id, req.selector).await?;
+    Ok(Json(serde_json::json!({ "node_id": node_id })))
+}
+
+#[derive(Deserialize)]
+pub struct WaitForNodeRequest {
+    pub selector: String,
+    pub timeout_ms: u64,
+}
+
+pub async fn wait_for_node(
+    State(state): State<Arc<AppState>>,
+    Path(execution_id): Path<String>,
+    Json(req): Json<WaitForNodeRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let node_id = svc(&state).wait_for_node(&execution_id, req.selector, req.timeout_ms).await?;
+    Ok(Json(serde_json::json!({ "node_id": node_id })))
+}
+
+pub async fn get_ui_map(
+    State(state): State<Arc<AppState>>,
+    Path(execution_id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let nodes = svc(&state).get_ui_map(&execution_id).await?;
+    Ok(Json(serde_json::json!(nodes)))
 }
 
 pub async fn teardown(

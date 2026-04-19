@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use axum::{extract::Path, extract::State, http::StatusCode, Json};
 use serde::Deserialize;
@@ -157,7 +158,6 @@ pub async fn scroll_by(
 pub struct ScrollToRequest {
     pub node_id: i64,
     pub human: Option<bool>,
-    pub to: Option<u32>,
 }
 
 pub async fn scroll_to(
@@ -165,7 +165,35 @@ pub async fn scroll_to(
     Path(execution_id): Path<String>,
     Json(req): Json<ScrollToRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    svc(&state).scroll_to(&execution_id, req.node_id, req.human.unwrap_or(false), req.to.unwrap_or(0)).await?;
+    svc(&state).scroll_to(&execution_id, req.node_id, req.human.unwrap_or(false)).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+pub struct SendKeysRequest {
+    pub keys: String,
+}
+
+pub async fn send_keys(
+    State(state): State<Arc<AppState>>,
+    Path(execution_id): Path<String>,
+    Json(req): Json<SendKeysRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    svc(&state).send_keys(&execution_id, &req.keys).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+pub struct HoldKeyRequest {
+    pub key: String,
+}
+
+pub async fn hold_key(
+    State(state): State<Arc<AppState>>,
+    Path(execution_id): Path<String>,
+    Json(req): Json<HoldKeyRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    svc(&state).hold_key(&execution_id, &req.key).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -179,14 +207,17 @@ pub async fn instruct(
     Path(execution_id): Path<String>,
     Json(req): Json<InstructRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if state.instruct_running.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        return Err(AppError::Conflict("an instruction is already running".to_string()));
+    }
     let svc = svc(&state);
-    // Verify the browser exists before accepting the job
     svc.get_browser(&execution_id).await?;
     let id = execution_id.clone();
     tokio::spawn(async move {
         if let Err(e) = svc.instruct(&id, &req.instruction).await {
             tracing::error!("instruct {id} failed: {e}");
         }
+        state.instruct_running.store(false, Ordering::Release);
     });
     Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "execution_id": execution_id, "status": "running" }))))
 }

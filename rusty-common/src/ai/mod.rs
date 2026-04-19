@@ -162,12 +162,12 @@ pub fn browser_tools() -> Vec<Tool> {
             r#type: "function",
             function: ToolDef {
                 name: "type",
-                description: "Type text, optionally into a specific input element identified by node_id",
+                description: "Types text into whichever element currently has focus.",
                 parameters: json!({
                     "type": "object",
                     "properties": {
                         "text": { "type": "string" },
-                        "node_id": { "type": "integer", "description": "node_id from find_node (omit to type at current focus)" }
+                        // "node_id": { "type": "integer", "description": "node_id from find_node (omit to type at current focus)" }
                     },
                     "required": ["text"]
                 }),
@@ -195,10 +195,50 @@ pub fn browser_tools() -> Vec<Tool> {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "node_id": { "type": "integer" },
-                        "to": { "type": "integer", "description": "0 = align top, 100 = align bottom" }
+                        "node_id": { "type": "integer" }
                     },
-                    "required": ["node_id", "to"]
+                    "required": ["node_id"]
+                }),
+            },
+        },
+        // Tool {
+        //     r#type: "function",
+        //     function: ToolDef {
+        //         name: "send_keys",
+        //         description: r#"Send one or more discrete key presses.
+        //
+        // Acceptable keys:
+        // - Backspace
+        //
+        // Formats:
+        // - Single: "Backspace"
+        // - Comma-separated: "Backspace, Backspace, Backspace"
+        // - With count: "Backspace10" (sends Backspace 10 times)"#,
+        //         parameters: json!({
+        //             "type": "object",
+        //             "properties": {
+        //                 "keys": { "type": "string" }
+        //             },
+        //             "required": ["keys"]
+        //         }),
+        //     },
+        // },
+        Tool {
+            r#type: "function",
+            function: ToolDef {
+                name: "hold_key",
+                description: r#"Hold a key down for a duration. Use this to clear an input field.
+
+Acceptable keys:
+- Backspace
+
+Format: "Backspace3000" (holds Backspace for 3000ms)"#,
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" }
+                    },
+                    "required": ["key"]
                 }),
             },
         },
@@ -229,25 +269,25 @@ pub fn browser_tools() -> Vec<Tool> {
                 }),
             },
         },
-        Tool {
-            r#type: "function",
-            function: ToolDef {
-                name: "eval_js",
-                description: "Execute JavaScript in the browser and return the result",
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "script": { "type": "string" }
-                    },
-                    "required": ["script"]
-                }),
-            },
-        },
+        // Tool {
+        //     r#type: "function",
+        //     function: ToolDef {
+        //         name: "eval_js",
+        //         description: "Execute JavaScript in the browser and return the result",
+        //         parameters: json!({
+        //             "type": "object",
+        //             "properties": {
+        //                 "script": { "type": "string" }
+        //             },
+        //             "required": ["script"]
+        //         }),
+        //     },
+        // },
         Tool {
             r#type: "function",
             function: ToolDef {
                 name: "wait",
-                description: "Pause for a number of milliseconds",
+                description: "Pauses execution for the given number of milliseconds. Use when the page needs time to load or react before proceeding.",
                 parameters: json!({
                     "type": "object",
                     "properties": {
@@ -286,7 +326,7 @@ pub fn browser_tools() -> Vec<Tool> {
             r#type: "function",
             function: ToolDef {
                 name: "screenshot",
-                description: "Capture a fresh screenshot to see the current browser state",
+                description: "Capture a screenshot to see the current browser state. Use sparingly — only when get_ui_map is insufficient and you are stuck.",
                 parameters: json!({ "type": "object", "properties": {} }),
             },
         },
@@ -319,7 +359,7 @@ pub enum BrowserAction {
     MouseMove { x: f32, y: f32 },
     HumanMouseMove { x: f32, y: f32 },
     ScrollBy { y: i32, human: bool },
-    ScrollTo { node_id: i64, human: bool, to: u32 },
+    ScrollTo { node_id: i64, human: bool },
     FetchHtml { node_id: Option<i64> },
     FetchText { node_id: i64 },
     EvalJs { script: String },
@@ -328,6 +368,10 @@ pub enum BrowserAction {
     Wait { ms: u64 },
     Screenshot,
     GetUiMap,
+    /// keys: "Backspace", "Backspace10", "Backspace, Backspace, Backspace"
+    SendKeys { keys: String },
+    /// key: "Backspace3000" — key name followed by duration in ms
+    HoldKey { key: String },
     Done { result: String },
 }
 

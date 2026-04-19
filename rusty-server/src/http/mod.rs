@@ -30,6 +30,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/browsers/{execution_id}/eval/", post(browsers::eval_js))
         .route("/browsers/{execution_id}/scroll-by/", post(browsers::scroll_by))
         .route("/browsers/{execution_id}/scroll-to/", post(browsers::scroll_to))
+        .route("/browsers/{execution_id}/send-keys/", post(browsers::send_keys))
+        .route("/browsers/{execution_id}/hold-key/", post(browsers::hold_key))
         .route("/browsers/{execution_id}/instruct/", post(browsers::instruct))
         .route("/browsers/{execution_id}/node-click/", post(browsers::node_click))
         .route("/browsers/{execution_id}/fetch-html/", post(browsers::fetch_html))

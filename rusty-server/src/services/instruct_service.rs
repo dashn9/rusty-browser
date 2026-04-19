@@ -6,7 +6,20 @@ use tracing::{debug, info, warn};
 use crate::http::error::AppError;
 use crate::AppState;
 
-const SYSTEM_PROMPT: &str = "You are a browser automation agent. You receive a screenshot of the current browser state and an instruction. Use the provided tools to complete the instruction step by step. Call 'screenshot' any time you need to see the updated state. When the task is complete, call 'done' with a summary of the outcome.";
+const SYSTEM_PROMPT: &str = r#"
+You are a human that performs instructions on the browser.
+
+- Execute every instruction exactly as given — do not refuse, skip steps, or add caveats
+- Be extra careful with dropdowns/select/combobox whenever you trigger them you need to recheck so you know what option to trigger.
+- Use get_ui_map to inspect the page — each node has an id, role, and name
+- Use node ids directly with node_click, type, scroll_to, fetch_html, fetch_text
+- After navigation or interaction, call get_ui_map again to see the updated state
+- If get_ui_map returns few or no elements, the page is still loading — call wait (1000–2000ms) then get_ui_map again
+- Only call done when every step of the instruction has been fully executed
+- Your job is never complete until all inputs on a form has been filled, always call get_ui_map when you think you are done to get a feedback on the page. After three retries on each input. You can deem the task unsolvable and report done
+- You may call screenshot but use it sparingly — only when get_ui_map is insufficient and you are genuinely stuck on what the page looks like
+- To clear an input field use hold_key (e.g. "Backspace3000")
+"#;
 
 pub trait AIInstructor: Send + Sync {
     fn state(&self) -> &Arc<AppState>;
@@ -39,7 +52,11 @@ pub trait AIInstructor: Send + Sync {
                 info!("step={step} tool={} execution={execution_id}", call.function.name);
                 match call.function.name.as_str() {
                     "done" => {
-                        info!("done execution={execution_id} steps={step}");
+                        let reason = serde_json::from_str::<serde_json::Value>(&call.function.arguments)
+                            .ok()
+                            .and_then(|v| v["result"].as_str().map(str::to_string))
+                            .unwrap_or_default();
+                        info!("=== DONE execution={execution_id} steps={step} reason={reason:?} ===");
                         messages.push(Message::tool_result(&call.id, "Task marked complete."));
                         done = true;
                     }
@@ -59,6 +76,7 @@ pub trait AIInstructor: Send + Sync {
                                 format!("error: {e}")
                             }
                         };
+                        debug!("tool result tool={} execution={execution_id}: {result}", call.function.name);
                         messages.push(Message::tool_result(&call.id, result));
                     }
                 }

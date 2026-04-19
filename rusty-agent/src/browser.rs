@@ -3,20 +3,18 @@ use std::time::Duration;
 use rand::Rng;
 use rand::seq::SliceRandom;
 use rustenium::browsers::ChromeTab;
+use rustenium::browsers::cdp_browser::CdpBrowser;
 use rustenium::browsers::cdp_browser::{
     BrowserScreenshotOptionsBuilder, FetchNodeOptions, Selector,
 };
 use rustenium::browsers::chrome::browser::ChromeConfig;
-use rustenium::browsers::{
-    cdp_browser::CdpBrowser,
-};
 use rustenium::domain::cdp::page::Page;
 use rustenium::domain::context::BrowsingContext;
 use rustenium::input::Mouse;
-use rustenium::input::{MouseClickOptions, MouseMoveOptions, Point};
+use rustenium::input::{DelayRange, MouseClickOptions, MouseMoveOptions, Point};
 use rustenium::nodes::{AXNode, Node};
-use rustenium_bidi_definitions::browsing_context::types::{CreateType};
-use rustenium_cdp_definitions::browser_protocol::dom::types::NodeId;
+use rustenium_bidi_definitions::browsing_context::types::CreateType;
+use rustenium_cdp_definitions::browser_protocol::dom::types::{BackendNodeId, NodeId};
 use rustenium_cdp_definitions::browser_protocol::page::commands::CaptureScreenshotFormat;
 use rustenium_identity::preset::get_by_id;
 use rustenium_identity::{IdentityConfig, IdentitySession};
@@ -113,8 +111,10 @@ impl ManagedBrowser {
         let mut session = IdentitySession::launch(config)
             .await
             .map_err(|e| BrowserError::Launch(e.to_string()))?;
-        let _ = session.browser_mut().add_preload_script(CURSOR_SCRIPT.to_string()).await;
-        let _ = session.browser_mut().evaluate_script(format!("({CURSOR_SCRIPT})()"), false).await;
+        let _ = session
+            .browser_mut()
+            .add_preload_script(format!("{CURSOR_SCRIPT}"))
+            .await;
         let id = Uuid::new_v4();
         tracing::info!("launched {id}");
         Ok(Self {
@@ -149,7 +149,14 @@ impl ManagedBrowser {
             .navigate(url)
             .await
             .map(|_| ())
-            .map_err(|e| BrowserError::Navigate(e.to_string()))
+            .map_err(|e| BrowserError::Navigate(e.to_string()))?;
+        tokio::time::sleep(Duration::from_secs(4)).await;
+        let _ = self
+            .session
+            .browser_mut()
+            .evaluate_script(format!("({CURSOR_SCRIPT})()"), false)
+            .await;
+        Ok(())
     }
 
     pub async fn screenshot(
@@ -196,10 +203,12 @@ impl ManagedBrowser {
 
     pub async fn node_click(&mut self, node_id: i64, human: bool) -> Result<(), BrowserError> {
         tracing::info!("{} NodeClick node_id={} human={}", self.id, node_id, human);
+        // TODO: fetch_node is called twice (once here inside scroll_to, once below) — could be unified
+        let _ = self.scroll_to(node_id, human).await;
         let mut node = self
             .session
             .browser_mut()
-            .fetch_node(FetchNodeOptions::default().node_id(NodeId::new(node_id)))
+            .fetch_node(FetchNodeOptions::default().backend_node_id(BackendNodeId::new(node_id)))
             .await
             .map_err(|e| BrowserError::Click(e.to_string()))?;
 
@@ -262,6 +271,31 @@ impl ManagedBrowser {
             .map_err(|e| BrowserError::TypeText(e.to_string()))
     }
 
+    pub async fn send_key(&self, key: &String, delay_ms: u64) -> Result<(), BrowserError> {
+        self.session
+            .browser()
+            .keyboard()
+            .press(key, delay_ms)
+            .await
+            .map_err(|e| BrowserError::Action(e.to_string()))
+    }
+
+    pub async fn hold_key(&self, key: &str, duration_ms: u64) -> Result<(), BrowserError> {
+        self.session
+            .browser()
+            .keyboard()
+            .hold_press(key, duration_ms, DelayRange::new(30, 80).unwrap())
+            .await
+            .map_err(|e| BrowserError::Action(e.to_string()))
+    }
+
+    pub async fn send_keys(&self, keys: &[String]) -> Result<(), BrowserError> {
+        for key in keys {
+            self.send_key(key, 50).await?;
+        }
+        Ok(())
+    }
+
     pub async fn mouse_move(&self, x: f32, y: f32, steps: usize) -> Result<(), BrowserError> {
         // let ctx = self.active_context().into();
         self.session
@@ -308,13 +342,7 @@ impl ManagedBrowser {
             .map_err(|e| BrowserError::Action(e.to_string()))
     }
 
-    pub async fn scroll_to(
-        &mut self,
-        node_id: i64,
-        human: bool,
-        to: u32,
-    ) -> Result<(), BrowserError> {
-        // Same fetch_node pattern as node_click / type_text
+    pub async fn scroll_to(&mut self, node_id: i64, human: bool) -> Result<(), BrowserError> {
         let mut node = self
             .session
             .browser_mut()
@@ -324,13 +352,9 @@ impl ManagedBrowser {
         let position = node.get_position().await.ok_or_else(|| {
             BrowserError::Action(format!("Could not get position for: {node_id}"))
         })?;
-        // 0 = align top of element to viewport top, >0 (100) = align bottom to viewport bottom
-        let target_y = if to == 0 {
-            position.y as i32
-        } else {
-            (position.y + position.height) as i32
-        };
-        if human {
+        let target_y = position.y as i32;
+        // I don't want to delve into the nuance of scroll right now !!! To Fix. !!!
+        if false {
             let ctx = BrowsingContext::from_id(String::new(), CreateType::Tab);
             self.session
                 .browser()
@@ -362,7 +386,7 @@ impl ManagedBrowser {
             .contexts
             .remove(context_id)
             .ok_or_else(|| BrowserError::Context(format!("Context not found: {context_id}")))?;
-        // Incomplete feature 
+        // Incomplete feature
         // if let Err(e) = self
         //     .session
         //     .browser_mut()
@@ -444,18 +468,49 @@ impl ManagedBrowser {
             for n in nodes {
                 let id = n.backend_dom_node_id.unwrap_or(0);
                 let parent_id = n.parent_id.as_deref().and_then(|s| s.parse::<i64>().ok());
-                let role = n.role.as_ref().and_then(|v| v.value.as_ref()).and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let name = n.name.as_ref().and_then(|v| v.value.as_ref()).and_then(|v| v.as_str()).map(str::to_string);
-                let value = n.value.as_ref().and_then(|v| v.value.as_ref()).and_then(|v| v.as_str()).map(str::to_string);
-                let props: serde_json::Map<String, serde_json::Value> = n.properties.iter()
-                    .filter_map(|p| Some((format!("{:?}", p.name), p.value.value.as_ref()?.clone())))
+                let role = n
+                    .role
+                    .as_ref()
+                    .and_then(|v| v.value.as_ref())
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let name = n
+                    .name
+                    .as_ref()
+                    .and_then(|v| v.value.as_ref())
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let value = n
+                    .value
+                    .as_ref()
+                    .and_then(|v| v.value.as_ref())
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let props: serde_json::Map<String, serde_json::Value> = n
+                    .properties
+                    .iter()
+                    .filter_map(|p| {
+                        Some((format!("{:?}", p.name), p.value.value.as_ref()?.clone()))
+                    })
                     .collect();
-                out.push(UiNode { id, role, name, parent_id, value, properties: if props.is_empty() { None } else { Some(props) } });
+                out.push(UiNode {
+                    id,
+                    role,
+                    name,
+                    parent_id,
+                    value,
+                    properties: if props.is_empty() { None } else { Some(props) },
+                });
                 collect(&n.children, out);
             }
         }
 
-        let nodes = self.session.browser_mut().get_accessible_nodes(true).await
+        let nodes = self
+            .session
+            .browser_mut()
+            .get_accessible_nodes(true)
+            .await
             .map_err(|e| BrowserError::Action(e.to_string()))?;
         let mut result = Vec::new();
         collect(&nodes, &mut result);

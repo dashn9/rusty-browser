@@ -21,6 +21,7 @@ pub struct AppState {
     pub flux: FluxClient,
     pub ai_provider: Box<dyn rusty_common::ai::AIProvider>,
     pub public_ip: String,
+    pub instruct_running: std::sync::atomic::AtomicBool,
 }
 
 #[tokio::main]
@@ -62,6 +63,7 @@ async fn main() -> Result<()> {
         flux,
         ai_provider,
         public_ip,
+        instruct_running: std::sync::atomic::AtomicBool::new(false),
     });
 
     let http_port = config.server.http_port;

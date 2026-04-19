@@ -69,7 +69,7 @@ pub async fn execute(browser: &mut ManagedBrowser, cmd: BrowserCommand) -> Resul
             Ok(ok())
         }
         Some(Action::ScrollTo(s)) => {
-            browser.scroll_to(s.node_id, s.human, s.to).await?;
+            browser.scroll_to(s.node_id, s.human).await?;
             Ok(ok())
         }
         Some(Action::FetchHtml(f)) => {
@@ -79,6 +79,14 @@ pub async fn execute(browser: &mut ManagedBrowser, cmd: BrowserCommand) -> Resul
         Some(Action::FetchText(f)) => {
             let text = browser.fetch_text(f.node_id).await?;
             Ok(ok_with(text))
+        }
+        Some(Action::SendKeys(s)) => {
+            browser.send_keys(&s.keys).await?;
+            Ok(ok())
+        }
+        Some(Action::HoldKey(h)) => {
+            browser.hold_key(&h.key, h.duration_ms).await?;
+            Ok(ok())
         }
         Some(Action::GetUiMap(_)) => {
             let nodes = browser.get_ui_map().await?;

@@ -40,7 +40,7 @@ impl BrowserService {
         if let Some(ref binary) = self.state.config.flux.local_binary {
             let execution_id = format!("test-{}", Uuid::new_v4());
             self.state.redis.store_pending_execution(&execution_id).await?;
-            spawn_local_agent(binary, &execution_id, &master_url).await?;
+            spawn_local_agent(binary, &execution_id, &master_url, &self.state.config.agent_env).await?;
             tracing::info!("local agent spawned execution_id={execution_id}");
             return Ok(execution_id);
         }
@@ -162,8 +162,17 @@ impl BrowserService {
         self.exec(execution_id, "", Action::ScrollBy(ScrollBy { y, human })).await
     }
 
-    pub async fn scroll_to(&self, execution_id: &str, node_id: i64, human: bool, to: u32) -> Result<(), AppError> {
-        self.exec(execution_id, "", Action::ScrollTo(ScrollTo { node_id, human, to })).await
+    pub async fn scroll_to(&self, execution_id: &str, node_id: i64, human: bool) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::ScrollTo(ScrollTo { node_id, human })).await
+    }
+
+    pub async fn send_keys(&self, execution_id: &str, keys: &str) -> Result<(), AppError> {
+        self.exec(execution_id, "", Action::SendKeys(SendKeys { keys: parse_keys(keys) })).await
+    }
+
+    pub async fn hold_key(&self, execution_id: &str, input: &str) -> Result<(), AppError> {
+        let (key, duration_ms) = parse_hold_key(input);
+        self.exec(execution_id, "", Action::HoldKey(HoldKey { key, duration_ms })).await
     }
 
     pub async fn teardown(&self) -> Result<serde_json::Value, AppError> {
@@ -226,8 +235,8 @@ impl BrowserService {
                 self.exec(execution_id, "", Action::ScrollBy(ScrollBy { y: *y, human: *human })).await?;
                 Ok("ok".to_string())
             }
-            BrowserAction::ScrollTo { node_id, human, to } => {
-                self.exec(execution_id, "", Action::ScrollTo(ScrollTo { node_id: *node_id, human: *human, to: *to })).await?;
+            BrowserAction::ScrollTo { node_id, human } => {
+                self.exec(execution_id, "", Action::ScrollTo(ScrollTo { node_id: *node_id, human: *human })).await?;
                 Ok("ok".to_string())
             }
             BrowserAction::FetchHtml { node_id } => {
@@ -259,7 +268,17 @@ impl BrowserService {
             }
             BrowserAction::GetUiMap => {
                 let r = self.exec_inner(execution_id, "", Action::GetUiMap(GetUiMap {})).await?;
-                Ok(r.result)
+                let nodes: Vec<rusty_common::ui_map::UiNode> = serde_json::from_str(&r.result)
+                    .map_err(|e| AppError::Internal(format!("ui_map parse: {e}")))?;
+                Ok(rusty_common::ui_map::format_compact(&nodes))
+            }
+            BrowserAction::SendKeys { keys } => {
+                self.send_keys(execution_id, keys).await?;
+                Ok("ok".to_string())
+            }
+            BrowserAction::HoldKey { key } => {
+                self.hold_key(execution_id, key).await?;
+                Ok("ok".to_string())
             }
             BrowserAction::Done { .. } => Ok("ok".to_string()),
         }
@@ -311,11 +330,11 @@ impl BrowserService {
                 Ok(ch) => return Ok(GrpcClient::new(ch)),
                 Err(e) => {
                     if attempt + 1 == MAX_RETRIES {
-                        tracing::warn!("Connect exhausted for {} ({}), removing: {e}", browser.execution_id, addr);
+                        tracing::warn!("[TEST-AGENT] ==> Connect exhausted for {} ({}), removing: {e}", browser.execution_id, addr);
                         let _ = self.state.redis.remove_browser(&browser.execution_id).await;
                         return Err(AppError::Internal(format!("Connect {addr}: {e}")));
                     }
-                    tracing::warn!("Connect attempt {} failed for {} ({}): {e}", attempt + 1, browser.execution_id, addr);
+                    tracing::warn!("[TEST-AGENT] ==> Connect attempt {} failed for {} ({}): {e}", attempt + 1, browser.execution_id, addr);
                     tokio::time::sleep(RETRY_DELAY).await;
                 }
             }
@@ -324,44 +343,61 @@ impl BrowserService {
     }
 }
 
-async fn spawn_local_agent(binary: &str, execution_id: &str, master_url: &str) -> Result<(), AppError> {
+async fn spawn_local_agent(binary: &str, execution_id: &str, master_url: &str, agent_env: &std::collections::HashMap<String, String>) -> Result<(), AppError> {
     let mut parts = binary.split_whitespace();
     let program = parts.next()
         .ok_or_else(|| AppError::Internal("flux.local_binary is empty".into()))?;
     let mut cmd = Command::new(program);
     cmd.args(parts);
     cmd.arg(master_url);
+
+    // Apply user-supplied env first so authoritative vars below cannot be overridden.
+    cmd.envs(agent_env);
     cmd.env("FLUX_EXECUTION_ID", execution_id);
     cmd.env("FLUX_NODE_PRIVATE_IP", "127.0.0.1");
     cmd.env("FLUX_NODE_PUBLIC_IP", "127.0.0.1");
-    cmd.env("RUSTY_CERT_DIR", std::env::temp_dir());
+
+    // Only default RUSTY_CERT_DIR if neither the caller nor the parent env provided one.
+    if !agent_env.contains_key("RUSTY_CERT_DIR") && std::env::var_os("RUSTY_CERT_DIR").is_none() {
+        cmd.env("RUSTY_CERT_DIR", std::env::temp_dir());
+    }
+
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
     let mut child = cmd.spawn()
         .map_err(|e| AppError::Internal(format!("local agent spawn: {e}")))?;
 
-    let id = execution_id.to_string();
-    if let Some(stdout) = child.stdout.take() {
-        let id2 = id.clone();
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    if let Some(stdout) = stdout {
+        let id = execution_id.to_string();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                tracing::info!(target: "rusty_agent", "[{id2}] {line}");
+                eprintln!("[TEST-AGENT] ==> [{id}] {line}");
             }
         });
     }
-    if let Some(stderr) = child.stderr.take() {
+    if let Some(stderr) = stderr {
+        let id = execution_id.to_string();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                tracing::info!(target: "rusty_agent", "[{id}] {line}");
+                eprintln!("[TEST-AGENT] ==> [{id}] {line}");
             }
         });
     }
 
-    // Detach — child lives until agent calls process::exit(0) on CloseBrowser
-    std::mem::forget(child);
+    // Own the child so it gets reaped on exit (agent calls process::exit on CloseBrowser).
+    let id = execution_id.to_string();
+    tokio::spawn(async move {
+        match child.wait().await {
+            Ok(status) => eprintln!("[TEST-AGENT] ==> [{id}] exited: {status}"),
+            Err(e) => eprintln!("[TEST-AGENT] ==> [{id}] wait failed: {e}"),
+        }
+    });
     Ok(())
 }
 
@@ -373,4 +409,37 @@ impl AIInstructor for BrowserService {
     async fn dispatch(&self, execution_id: &str, action: &BrowserAction) -> Result<String, AppError> {
         BrowserService::dispatch(self, execution_id, action).await
     }
+}
+
+fn parse_hold_key(input: &str) -> (String, u64) {
+    let input = input.trim();
+    let digit_start = input.find(|c: char| c.is_ascii_digit()).unwrap_or(input.len());
+    let (key, ms_str) = input.split_at(digit_start);
+    let duration_ms = ms_str.parse::<u64>().unwrap_or(0);
+    (key.to_string(), duration_ms)
+}
+
+fn parse_keys(input: &str) -> Vec<String> {
+    let tokens: Vec<&str> = if input.contains(", ") {
+        input.split(", ").collect()
+    } else if input.contains(',') {
+        input.split(',').collect()
+    } else if input.contains(' ') {
+        input.split(' ').collect()
+    } else {
+        vec![input]
+    };
+
+    let mut out = Vec::new();
+    for token in tokens {
+        let token = token.trim();
+        if token.is_empty() { continue; }
+        let digit_start = token.find(|c: char| c.is_ascii_digit()).unwrap_or(token.len());
+        let (key, count_str) = token.split_at(digit_start);
+        let count = count_str.parse::<usize>().unwrap_or(1).max(1);
+        for _ in 0..count {
+            out.push(key.to_string());
+        }
+    }
+    out
 }

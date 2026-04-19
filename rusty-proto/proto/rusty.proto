@@ -51,6 +51,8 @@ message BrowserCommand {
     FetchHtml fetch_html = 26;
     FetchText fetch_text = 27;
     GetUiMap get_ui_map = 28;
+    SendKeys send_keys = 29;
+    HoldKey hold_key = 30;
   }
 }
 
@@ -124,7 +126,15 @@ message ScrollBy {
 message ScrollTo {
   int64 node_id = 1;
   bool human = 2;
-  uint32 to = 3; // 0 = top of element at viewport top, 100 = bottom of element at viewport bottom
+}
+
+message SendKeys {
+  repeated string keys = 1;
+}
+
+message HoldKey {
+  string key = 1;
+  uint64 duration_ms = 2;
 }
 
 message FetchHtml {

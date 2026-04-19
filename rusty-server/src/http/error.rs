@@ -27,6 +27,7 @@ pub enum AppError {
     Internal(String),
     NotFound(String),
     Unauthorized,
+    Conflict(String),
 }
 
 impl IntoResponse for AppError {
@@ -64,6 +65,9 @@ impl IntoResponse for AppError {
             AppError::Unauthorized => {
                 (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "Unauthorized".to_string())
             }
+            AppError::Conflict(msg) => {
+                (StatusCode::CONFLICT, "CONFLICT", msg)
+            }
         };
 
         let body = ErrorResponse {
@@ -84,6 +88,7 @@ impl std::fmt::Display for AppError {
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
             AppError::NotFound(id) => write!(f, "not found: {id}"),
             AppError::Unauthorized => write!(f, "unauthorized"),
+            AppError::Conflict(msg) => write!(f, "conflict: {msg}"),
         }
     }
 }

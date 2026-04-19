@@ -39,6 +39,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/browsers/{execution_id}/find-node/", post(browsers::find_node))
         .route("/browsers/{execution_id}/wait-for-node/", post(browsers::wait_for_node))
         .route("/browsers/{execution_id}/ui-map/", get(browsers::get_ui_map))
+        .route("/browsers/{execution_id}/ui-map-diff/", get(browsers::get_ui_map_diff))
         .route("/browsers/{execution_id}/logs/", get(browsers::get_execution_logs))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

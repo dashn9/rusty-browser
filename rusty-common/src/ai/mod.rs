@@ -314,11 +314,19 @@ Format: "Backspace3000" (holds Backspace for 3000ms)"#,
                 }),
             },
         },
+        // Tool {
+        //     r#type: "function",
+        //     function: ToolDef {
+        //         name: "get_ui_map",
+        //         description: "Returns the full accessible UI element tree of the current page. Each node has an id, role, name, and optional value.",
+        //         parameters: json!({ "type": "object", "properties": {} }),
+        //     },
+        // },
         Tool {
             r#type: "function",
             function: ToolDef {
-                name: "get_ui_map",
-                description: "Get the accessible UI element tree of the page. Each node has an id (use directly for node operations), role, name, and optional value/properties.",
+                name: "get_ui_map_diff",
+                description: "Returns only the nodes that changed or were added since the last get_ui_map call.",
                 parameters: json!({ "type": "object", "properties": {} }),
             },
         },
@@ -328,6 +336,21 @@ Format: "Backspace3000" (holds Backspace for 3000ms)"#,
                 name: "screenshot",
                 description: "Capture a screenshot to see the current browser state. Use sparingly — only when get_ui_map is insufficient and you are stuck.",
                 parameters: json!({ "type": "object", "properties": {} }),
+            },
+        },
+        Tool {
+            r#type: "function",
+            function: ToolDef {
+                name: "engage_input",
+                description: "Interact with an input field or combobox. For normal inputs: clicks then types. For comboboxes/dropdowns: opens, locates the matching option by name, and selects it.",
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "node_id": { "type": "integer" },
+                        "value": { "type": "string", "description": "Text to type, or option name to select" }
+                    },
+                    "required": ["node_id", "value"]
+                }),
             },
         },
         Tool {
@@ -368,11 +391,13 @@ pub enum BrowserAction {
     Wait { ms: u64 },
     Screenshot,
     GetUiMap,
+    GetUiMapDiff,
     /// keys: "Backspace", "Backspace10", "Backspace, Backspace, Backspace"
     SendKeys { keys: String },
     /// key: "Backspace3000" — key name followed by duration in ms
     HoldKey { key: String },
     Done { result: String },
+    EngageInput { node_id: i64, value: String },
 }
 
 /// Convert a single tool call into a BrowserAction, injecting server-side defaults.

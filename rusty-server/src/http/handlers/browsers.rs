@@ -302,6 +302,14 @@ pub async fn get_ui_map(
     Ok(Json(serde_json::json!(nodes)))
 }
 
+pub async fn get_ui_map_diff(
+    State(state): State<Arc<AppState>>,
+    Path(execution_id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let diff = svc(&state).get_ui_map_diff(&execution_id).await?;
+    Ok(Json(serde_json::json!(diff)))
+}
+
 pub async fn teardown(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, AppError> {

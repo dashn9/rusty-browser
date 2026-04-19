@@ -11,6 +11,7 @@ mod services;
 use rusty_common::config::RustyConfig;
 use rusty_common::flux::FluxClient;
 use rusty_common::redis_store::RedisStore;
+use rusty_common::ui_map::UiNode;
 use rusty_common::util::{detect_public_ip, free_port};
 use rusty_proto::master_server::MasterServer;
 use tower_http::trace::TraceLayer;
@@ -22,6 +23,7 @@ pub struct AppState {
     pub ai_provider: Box<dyn rusty_common::ai::AIProvider>,
     pub public_ip: String,
     pub instruct_running: std::sync::atomic::AtomicBool,
+    pub ui_map_cache: std::sync::Mutex<std::collections::HashMap<String, Vec<UiNode>>>,
 }
 
 #[tokio::main]
@@ -35,7 +37,8 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "rusty=info,tower_http=info".parse().unwrap()),
+                .unwrap_or_else(|_| "info".parse().unwrap())
+                .add_directive("rusty_common=info".parse().unwrap()),
         )
         .init();
 
@@ -64,6 +67,7 @@ async fn main() -> Result<()> {
         ai_provider,
         public_ip,
         instruct_running: std::sync::atomic::AtomicBool::new(false),
+        ui_map_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
     });
 
     let http_port = config.server.http_port;

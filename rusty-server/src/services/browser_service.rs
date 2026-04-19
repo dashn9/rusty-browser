@@ -196,8 +196,52 @@ impl BrowserService {
 
     pub async fn get_ui_map(&self, execution_id: &str) -> Result<Vec<rusty_common::ui_map::UiNode>, AppError> {
         let r = self.exec_inner(execution_id, "", Action::GetUiMap(GetUiMap {})).await?;
-        serde_json::from_str(&r.result)
-            .map_err(|e| AppError::Internal(format!("ui_map parse: {e}")))
+        let nodes: Vec<rusty_common::ui_map::UiNode> = serde_json::from_str(&r.result)
+            .map_err(|e| AppError::Internal(format!("ui_map parse: {e}")))?;
+        if let Ok(mut cache) = self.state.ui_map_cache.lock() {
+            cache.insert(execution_id.to_string(), nodes.clone());
+        }
+        Ok(nodes)
+    }
+
+    pub async fn engage_input(&self, execution_id: &str, node_id: i64, value: &str) -> Result<String, AppError> {
+        let role = self.state.ui_map_cache.lock().ok()
+            .and_then(|c| c.get(execution_id)
+                .and_then(|nodes| nodes.iter().find(|n| n.id == node_id).map(|n| n.role.clone())))
+            .unwrap_or_default();
+
+        if matches!(role.to_lowercase().as_str(), "combobox" | "listbox" | "select") {
+            // snapshot before state so diff only captures nodes that appear after opening this dropdown
+            self.get_ui_map(execution_id).await?;
+            let _ = self.scroll_to(execution_id, node_id, true).await;
+            self.node_click(execution_id, node_id, true).await?;
+            let diff = self.get_ui_map_diff(execution_id).await?;
+            let val_lower = value.to_lowercase();
+            let opt = diff.added.iter().find(|n|
+                n.role.to_lowercase() == "option" &&
+                n.name.as_ref().map(|s| s.to_lowercase().contains(&val_lower)).unwrap_or(false)
+            );
+            match opt {
+                Some(o) => {
+                    self.node_click(execution_id, o.id, true).await?;
+                    Ok(format!("selected '{}' from combobox {node_id}", o.name.as_deref().unwrap_or("")))
+                }
+                None => Ok(format!("combobox {node_id} opened but no option matching '{value}' found")),
+            }
+        } else {
+            let _ = self.scroll_to(execution_id, node_id, true).await;
+            self.node_click(execution_id, node_id, true).await?;
+            self.type_text(execution_id, value.to_string(), None).await?;
+            Ok(format!("typed '{value}' into node {node_id}"))
+        }
+    }
+
+    pub async fn get_ui_map_diff(&self, execution_id: &str) -> Result<rusty_common::ui_map::UiMapDiff, AppError> {
+        let before = self.state.ui_map_cache.lock().ok()
+            .and_then(|c| c.get(execution_id).cloned())
+            .unwrap_or_default();
+        let after = self.get_ui_map(execution_id).await?;
+        Ok(rusty_common::ui_map::diff(&before, &after))
     }
 
     pub async fn get_execution_logs(&self, execution_id: &str) -> Result<String, AppError> {
@@ -272,6 +316,14 @@ impl BrowserService {
                     .map_err(|e| AppError::Internal(format!("ui_map parse: {e}")))?;
                 Ok(rusty_common::ui_map::format_compact(&nodes))
             }
+            BrowserAction::GetUiMapDiff => {
+                let d = self.get_ui_map_diff(execution_id).await?;
+                let mut parts = Vec::new();
+                for n in &d.added { parts.push(format!("+ {}", rusty_common::ui_map::format_compact(&[n.clone()]))); }
+                for n in &d.changed { parts.push(format!("~ {}", rusty_common::ui_map::format_compact(&[n.clone()]))); }
+                for n in &d.removed { parts.push(format!("- {}", rusty_common::ui_map::format_compact(&[n.clone()]))); }
+                Ok(if parts.is_empty() { "no changes".to_string() } else { parts.join("\n") })
+            }
             BrowserAction::SendKeys { keys } => {
                 self.send_keys(execution_id, keys).await?;
                 Ok("ok".to_string())
@@ -281,6 +333,9 @@ impl BrowserService {
                 Ok("ok".to_string())
             }
             BrowserAction::Done { .. } => Ok("ok".to_string()),
+            BrowserAction::EngageInput { node_id, value } => {
+                self.engage_input(execution_id, *node_id, value).await
+            }
         }
     }
 

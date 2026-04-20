@@ -12,16 +12,16 @@ path = "src/main.rs"
 [dependencies]
 rusty-common = { path = "../rusty-common" }
 rusty-proto = { path = "../rusty-proto" }
-# rustenium-identity = "0.1.6"
-# rustenium = "1.1.6"
-# rustenium-cdp-definitions = "0.1.2"
-# rustenium-bidi-definitions = "0.1.1"
-# rustenium-macros = "1.0.0"
-rustenium-identity = { path = "D:\\Documents\\m-workspace\\rustenium-identity" }
-rustenium = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium" }
-rustenium-cdp-definitions = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium-cdp-definitions" }
-rustenium-bidi-definitions = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium-bidi-definitions" }
-rustenium-macros = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium-macros" }
+rustenium-identity = "0.1.7"
+rustenium = "1.1.9"
+rustenium-cdp-definitions = "0.1.1"
+rustenium-bidi-definitions = "0.1.1"
+rustenium-macros = "1.0.0"
+# rustenium-identity = { path = "D:\\Documents\\m-workspace\\rustenium-identity" }
+# rustenium = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium" }
+# rustenium-cdp-definitions = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium-cdp-definitions" }
+# rustenium-bidi-definitions = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium-bidi-definitions" }
+# rustenium-macros = { path = "D:\\Documents\\m-workspace\\rustenium\\rustenium-macros" }
 
 tokio = { version = "1.50.0", features = ["full"] }
 serde = "1.0.228"

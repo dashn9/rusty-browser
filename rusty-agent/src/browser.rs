@@ -346,7 +346,7 @@ impl ManagedBrowser {
         let mut node = self
             .session
             .browser_mut()
-            .fetch_node(FetchNodeOptions::default().node_id(NodeId::new(node_id)))
+            .fetch_node(FetchNodeOptions::default().backend_node_id(BackendNodeId::new(node_id)))
             .await
             .map_err(|e| BrowserError::Action(e.to_string()))?;
         let position = node.get_position().await.ok_or_else(|| {

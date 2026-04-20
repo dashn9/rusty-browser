@@ -205,29 +205,47 @@ impl BrowserService {
     }
 
     pub async fn engage_input(&self, execution_id: &str, node_id: i64, value: &str) -> Result<String, AppError> {
+        if value.is_empty() {
+            let _ = self.scroll_to(execution_id, node_id, true).await;
+            self.node_click(execution_id, node_id, true).await?;
+            return Ok(format!("clicked node {node_id}"));
+        }
+
         let role = self.state.ui_map_cache.lock().ok()
             .and_then(|c| c.get(execution_id)
                 .and_then(|nodes| nodes.iter().find(|n| n.id == node_id).map(|n| n.role.clone())))
             .unwrap_or_default();
 
         if matches!(role.to_lowercase().as_str(), "combobox" | "listbox" | "select") {
-            // snapshot before state so diff only captures nodes that appear after opening this dropdown
-            self.get_ui_map(execution_id).await?;
-            let _ = self.scroll_to(execution_id, node_id, true).await;
-            self.node_click(execution_id, node_id, true).await?;
-            let diff = self.get_ui_map_diff(execution_id).await?;
             let val_lower = value.to_lowercase();
-            let opt = diff.added.iter().find(|n|
-                n.role.to_lowercase() == "option" &&
-                n.name.as_ref().map(|s| s.to_lowercase().contains(&val_lower)).unwrap_or(false)
-            );
-            match opt {
-                Some(o) => {
-                    self.node_click(execution_id, o.id, true).await?;
-                    Ok(format!("selected '{}' from combobox {node_id}", o.name.as_deref().unwrap_or("")))
+            const MAX_ATTEMPTS: u32 = 2;
+            for attempt in 0..MAX_ATTEMPTS {
+                // snapshot before click so diff only shows nodes that appeared from this open
+                self.get_ui_map(execution_id).await?;
+                if attempt == 0 {
+                    let _ = self.scroll_to(execution_id, node_id, true).await;
                 }
-                None => Ok(format!("combobox {node_id} opened but no option matching '{value}' found")),
+                self.node_click(execution_id, node_id, true).await?;
+                let diff = self.get_ui_map_diff(execution_id).await?;
+                let options: Vec<_> = diff.added.iter()
+                    .filter(|n| n.role.to_lowercase() == "option")
+                    .collect();
+                if options.is_empty() {
+                    continue;
+                }
+                let opt = options.iter().copied()
+                    .find(|n| n.name.as_ref().map(|s| s.to_lowercase() == val_lower).unwrap_or(false))
+                    .or_else(|| options.iter().copied()
+                        .find(|n| n.name.as_ref().map(|s| s.to_lowercase().contains(&val_lower)).unwrap_or(false)));
+                match opt {
+                    Some(o) => {
+                        self.node_click(execution_id, o.id, true).await?;
+                        return Ok(format!("selected '{}' from combobox {node_id}", o.name.as_deref().unwrap_or("")));
+                    }
+                    None => return Ok(format!("combobox {node_id} opened but no option matching '{value}' found")),
+                }
             }
+            Ok(format!("combobox {node_id} did not reveal options after {MAX_ATTEMPTS} attempts"))
         } else {
             let _ = self.scroll_to(execution_id, node_id, true).await;
             self.node_click(execution_id, node_id, true).await?;

@@ -144,20 +144,20 @@ pub fn browser_tools() -> Vec<Tool> {
                 }),
             },
         },
-        Tool {
-            r#type: "function",
-            function: ToolDef {
-                name: "node_click",
-                description: "Click a DOM element by node_id returned from find_node or wait_for_node",
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "node_id": { "type": "integer" }
-                    },
-                    "required": ["node_id"]
-                }),
-            },
-        },
+        // Tool {
+        //     r#type: "function",
+        //     function: ToolDef {
+        //         name: "node_click",
+        //         description: "Click a DOM element by node_id returned from find_node or wait_for_node",
+        //         parameters: json!({
+        //             "type": "object",
+        //             "properties": {
+        //                 "node_id": { "type": "integer" }
+        //             },
+        //             "required": ["node_id"]
+        //         }),
+        //     },
+        // },
         Tool {
             r#type: "function",
             function: ToolDef {
@@ -342,12 +342,12 @@ Format: "Backspace3000" (holds Backspace for 3000ms)"#,
             r#type: "function",
             function: ToolDef {
                 name: "engage_input",
-                description: "Interact with an input field or combobox. For normal inputs: clicks then types. For comboboxes/dropdowns: opens, locates the matching option by name, and selects it.",
+                description: "Interact with any node — inputs, comboboxes, buttons, or links. For inputs: clicks then types. For comboboxes: opens and selects matching option. For buttons/links: pass empty string as value to just click.",
                 parameters: json!({
                     "type": "object",
                     "properties": {
                         "node_id": { "type": "integer" },
-                        "value": { "type": "string", "description": "Text to type, or option name to select" }
+                        "value": { "type": "string", "description": "Text to type, option name to select, or empty string to just click" }
                     },
                     "required": ["node_id", "value"]
                 }),

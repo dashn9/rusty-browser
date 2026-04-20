@@ -1,6 +1,9 @@
-# Rusty
+<h1 align="center">
+  <img src="https://rustybrowser.com/logos/rusty-browser_inv.png" height="50" valign="middle" />
+  &nbsp;Rusty Browser
+</h1>
 
-**Distributed browser automation at scale — built in Rust.**
+**Distributed AI-driven browser automation at scale — built in Rust.**
 
 Rusty is a serverless browser automation platform. You spawn browser agents on demand via an HTTP API, send them commands (navigate, click, type, screenshot, scroll, eval JS), and drive them with natural language through an AI instruct engine. Each agent runs in isolation, registers itself back to the master over gRPC, and is torn down when you're done.
 
@@ -17,7 +20,7 @@ Most browser automation tools treat the browser as a local subprocess. That work
 | Scale | Hundreds of concurrent agents | Limited by machine | Limited by plan | Limited by machine |
 | Stealth | Built-in identity + proxy per agent | None | None | None |
 | AI | Optional, per-agent | Core dependency | Core dependency | None |
-| Infrastructure | Self-hosted on Flux | Local | Browserbase cloud | Local |
+| Infrastructure | Self-hosted with Flux | Local | Browserbase cloud | Local |
 | Security | Mutual TLS, cert pinning | None | Managed | None |
 | Overhead | Single Rust binary | Python runtime | Node.js runtime | Node.js runtime |
 
@@ -160,6 +163,51 @@ See [`rusty-server/example.agent-proxies.yaml`](rusty-server/example.agent-proxi
 - **Master cert** — generated once at server startup, stored in Redis, bundled into every agent. Agents use it to verify the master's identity (certificate pinning).
 - **Agent cert** — generated at `/initialize/`, stored in Redis, bundled into every agent. The server fetches it from Redis to verify each agent it connects to.
 - **Tunnel mode** — set `grpc_server_url` in config (e.g. an ngrok URL). The server automatically switches agents to native TLS verification instead of the pinned master cert.
+
+---
+
+## Setup
+
+### 1. Install Flux
+
+Rusty Browser uses [serverless-flux](https://github.com/dashn9/serverless-flux) to deploy browser agents on AWS and GCP at scale. Follow the setup instructions in that repo first, then come back with your Flux URL and API key.
+
+### 2. Install Rusty Browser
+
+Download the latest release binary for your platform from the [releases page](https://github.com/dashn9/rusty-browser/releases).
+
+### 3. Configure
+
+Copy the example config:
+
+```sh
+cp example.rusty.yaml rusty.yaml
+```
+
+Paste your Flux URL and API key:
+
+```yaml
+flux:
+  base_url: "https://your-flux-url"
+  api_key: "your_flux_api_key"
+  function_name: "rusty-agent"
+```
+
+### 4. Run
+
+```sh
+RUSTY_CONFIG=rusty.yaml ./rusty
+```
+
+### 5. Initialize
+
+Call this once before spawning any browsers — it generates TLS certs, bundles the agent, and deploys it to Flux:
+
+```sh
+curl -X POST http://localhost:8080/initialize/
+```
+
+Re-run after any agent code changes or when rotating certs.
 
 ---
 

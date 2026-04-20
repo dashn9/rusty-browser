@@ -105,7 +105,7 @@ pub struct ManagedBrowser {
 impl ManagedBrowser {
     pub async fn launch(browser_config: ChromeBrowserLaunchConfig) -> Result<Self, BrowserError> {
         let mut identity = get_by_id(1).unwrap();
-        // identity.proxy = Self::select_proxy(&identity.geo);
+        identity.proxy = Self::select_proxy(&identity.geo);
 
         let config = IdentityConfig::new(identity, browser_config.into());
         let mut session = IdentitySession::launch(config)

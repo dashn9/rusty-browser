@@ -10,7 +10,7 @@
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/rusty-server",
       "environment": [
-        { "name": "RUSTMANI_CONFIG", "value": "rusty.yaml" },
+        { "name": "RUSTY_CONFIG", "value": "rusty.yaml" },
         // { "name": "RUST_LOG", "value": "debug" }
       ],
       "preLaunchTask": "cargo build rusty-server"

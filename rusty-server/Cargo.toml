@@ -49,7 +49,7 @@ The master server for the Rusty browser automation cluster.
 """
 assets = [
   ["target/release/rusty", "usr/bin/rusty", "755"],
-  ["example.rustmani.yaml", "etc/rusty/rusty.yaml", "644"],
+  ["example.rusty.yaml", "etc/rusty/rusty.yaml", "644"],
   ["rusty.service", "lib/systemd/system/rusty.service", "644"],
 ]
 conf-files = ["/etc/rusty/rusty.yaml"]

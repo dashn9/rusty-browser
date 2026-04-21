@@ -2586,6 +2586,8 @@ checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
 [[package]]
 name = "rustenium"
 version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea0a919689ad91e241ceb28fe6c1c61bc60918455ec70f2e1cb3421568ee6275"
 dependencies = [
  "base64 0.22.1",
  "rand 0.9.2",
@@ -2602,6 +2604,8 @@ dependencies = [
 [[package]]
 name = "rustenium-bidi-definitions"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92e8133b660c3485f5b5ccb1ad91dfce25751a684a2bba58956d23b18ec9c1d8"
 dependencies = [
  "serde",
  "serde_json",
@@ -2611,6 +2615,8 @@ dependencies = [
 [[package]]
 name = "rustenium-cdp-definitions"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc5f58211d846a093af3b1a24bc70f87b5cce0bfa8c15077622ab8d8c8a09f51"
 dependencies = [
  "serde",
  "serde_json",
@@ -2619,6 +2625,8 @@ dependencies = [
 [[package]]
 name = "rustenium-core"
 version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f3c6d484f2643f5c8289e78fa90839a8c2d8d16ef5847111b1b43a1f021414c"
 dependencies = [
  "fastwebsockets",
  "form_urlencoded",
@@ -2638,7 +2646,9 @@ dependencies = [
 
 [[package]]
 name = "rustenium-identity"
-version = "0.1.6"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ef6c1202634c267fa4c94f4a02c1806f06a73d5b809ea674785797d63269cdd"
 dependencies = [
  "base64 0.22.1",
  "hyper",
@@ -2657,6 +2667,8 @@ dependencies = [
 [[package]]
 name = "rustenium-macros"
 version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09fdc24675bdf04e677b9228cd8602131d427a2c31cddb9c607ed5a26efc9439"
 dependencies = [
  "rustenium-bidi-definitions",
 ]

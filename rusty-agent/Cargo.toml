@@ -44,10 +44,6 @@ criterion = { version = "0.5", features = ["html_reports"] }
 name = "browser_config"
 harness = false
 
-[[bench]]
-name = "error"
-harness = false
-
 [package.metadata.deb]
 name = "rusty-agent"
 revision = "0"

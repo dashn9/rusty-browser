@@ -101,19 +101,19 @@ pub struct ToolCallFunction {
 // ---------- Tool definitions ----------
 
 #[derive(Serialize)]
-pub(crate) struct Tool {
+pub struct Tool {
     pub r#type: &'static str,
     pub function: ToolDef,
 }
 
 #[derive(Serialize)]
-pub(crate) struct ToolDef {
+pub struct ToolDef {
     pub name: &'static str,
     pub description: &'static str,
     pub parameters: Value,
 }
 
-pub(crate) fn browser_tools() -> Vec<Tool> {
+pub fn browser_tools() -> Vec<Tool> {
     vec![
         Tool {
             r#type: "function",

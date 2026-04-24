@@ -227,3 +227,438 @@ impl ProxyList {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn write_temp_config(content: &str) -> tempfile::NamedTempFile {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        f
+    }
+
+    fn minimal_yaml(extra: &str) -> String {
+        format!(
+            r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: "sk-test"
+  model: "gpt-4o"
+flux:
+  url: "https://flux.example.com"
+  token: "tok123"
+api_keys:
+  - "apikey1"
+{extra}
+"#
+        )
+    }
+
+    // ---- RustyConfig::load ----
+
+    #[test]
+    fn load_minimal_valid_config() {
+        let f = write_temp_config(&minimal_yaml(""));
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.server.http_port, 8080);
+        assert_eq!(cfg.redis.url, "redis://localhost:6379");
+        assert_eq!(cfg.ai.provider, AIProviderKind::OpenAI);
+        assert_eq!(cfg.ai.api_key, "sk-test");
+        assert_eq!(cfg.ai.model, "gpt-4o");
+        assert_eq!(cfg.flux.url, "https://flux.example.com");
+        assert_eq!(cfg.flux.token, "tok123");
+        assert_eq!(cfg.api_keys, vec!["apikey1"]);
+    }
+
+    #[test]
+    fn load_applies_default_http_port() {
+        let yaml = r#"
+server: {}
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: "k"
+  model: "m"
+flux:
+  url: "https://x.com"
+  token: "t"
+api_keys: ["k1"]
+"#;
+        let f = write_temp_config(yaml);
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.server.http_port, 8080);
+    }
+
+    #[test]
+    fn load_applies_default_key_prefix() {
+        let f = write_temp_config(&minimal_yaml(""));
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.redis.key_prefix, "rusty:");
+    }
+
+    #[test]
+    fn load_applies_default_function_name() {
+        let f = write_temp_config(&minimal_yaml(""));
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.flux.function_name, "rusty-agent");
+    }
+
+    #[test]
+    fn load_applies_default_quality() {
+        let f = write_temp_config(&minimal_yaml(""));
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert!((cfg.ai.resolution.quality - 0.85).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn load_applies_default_pending_timeout_secs() {
+        let f = write_temp_config(&minimal_yaml(""));
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.flux.pending_timeout_secs, 10);
+    }
+
+    #[test]
+    fn load_custom_quality_valid() {
+        let extra = "ai:\n  provider: openai\n  api_key: k\n  model: m\n  resolution:\n    quality: 0.5\n";
+        let yaml = format!(
+            r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+flux:
+  url: "https://x.com"
+  token: "t"
+api_keys: ["k1"]
+{extra}
+"#
+        );
+        let f = write_temp_config(&yaml);
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert!((cfg.ai.resolution.quality - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn load_rejects_quality_above_one() {
+        let yaml = r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: k
+  model: m
+  resolution:
+    quality: 1.5
+flux:
+  url: "https://x.com"
+  token: "t"
+api_keys: ["k1"]
+"#;
+        let f = write_temp_config(yaml);
+        let err = RustyConfig::load(f.path().to_str().unwrap()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("quality"), "expected quality error, got: {msg}");
+    }
+
+    #[test]
+    fn load_rejects_quality_below_zero() {
+        let yaml = r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: k
+  model: m
+  resolution:
+    quality: -0.1
+flux:
+  url: "https://x.com"
+  token: "t"
+api_keys: ["k1"]
+"#;
+        let f = write_temp_config(yaml);
+        let err = RustyConfig::load(f.path().to_str().unwrap()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("quality"), "expected quality error, got: {msg}");
+    }
+
+    #[test]
+    fn load_accepts_quality_zero() {
+        let yaml = r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: k
+  model: m
+  resolution:
+    quality: 0.0
+flux:
+  url: "https://x.com"
+  token: "t"
+api_keys: ["k1"]
+"#;
+        let f = write_temp_config(yaml);
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert!((cfg.ai.resolution.quality - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn load_accepts_quality_one() {
+        let yaml = r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: k
+  model: m
+  resolution:
+    quality: 1.0
+flux:
+  url: "https://x.com"
+  token: "t"
+api_keys: ["k1"]
+"#;
+        let f = write_temp_config(yaml);
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert!((cfg.ai.resolution.quality - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn load_missing_file_returns_read_error() {
+        let err = RustyConfig::load("/nonexistent/path/config.yaml").unwrap_err();
+        assert!(matches!(err, ConfigError::Read(_)));
+    }
+
+    #[test]
+    fn load_invalid_yaml_returns_parse_error() {
+        let f = write_temp_config("not: valid: yaml: ][");
+        let err = RustyConfig::load(f.path().to_str().unwrap()).unwrap_err();
+        assert!(matches!(err, ConfigError::Parse(_)));
+    }
+
+    #[test]
+    fn load_openrouter_provider() {
+        let yaml = r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openrouter
+  api_key: "or-key"
+  model: "mistral"
+flux:
+  url: "https://x.com"
+  token: "t"
+api_keys: ["k1"]
+"#;
+        let f = write_temp_config(yaml);
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.ai.provider, AIProviderKind::OpenRouter);
+    }
+
+    #[test]
+    fn load_flux_alias_fields() {
+        let yaml = r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: k
+  model: m
+flux:
+  base_url: "https://alias.example.com"
+  api_key: "alias-tok"
+api_keys: ["k1"]
+"#;
+        let f = write_temp_config(yaml);
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.flux.url, "https://alias.example.com");
+        assert_eq!(cfg.flux.token, "alias-tok");
+    }
+
+    #[test]
+    fn load_local_binary_field() {
+        let extra = "  local_binary: \"/usr/local/bin/rusty-agent\"";
+        let yaml = format!(
+            r#"
+server:
+  http_port: 8080
+redis:
+  url: "redis://localhost:6379"
+ai:
+  provider: openai
+  api_key: k
+  model: m
+flux:
+  url: "https://x.com"
+  token: "t"
+{extra}
+api_keys: ["k1"]
+"#
+        );
+        let f = write_temp_config(&yaml);
+        let cfg = RustyConfig::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(cfg.flux.local_binary.as_deref(), Some("/usr/local/bin/rusty-agent"));
+    }
+
+    // ---- AgentOsTarget ----
+
+    #[test]
+    fn agent_os_target_linux_binary_name() {
+        assert_eq!(AgentOsTarget::Linux.binary_name(), "rusty-agent");
+    }
+
+    #[test]
+    fn agent_os_target_windows_binary_name() {
+        assert_eq!(AgentOsTarget::Windows.binary_name(), "rusty-agent.exe");
+    }
+
+    #[test]
+    fn agent_os_target_default_is_linux() {
+        assert_eq!(AgentOsTarget::default(), AgentOsTarget::Linux);
+    }
+
+    // ---- ProxyList ----
+
+    fn proxy_list_from_yaml(yaml: &str) -> ProxyList {
+        yaml_serde::from_str(yaml).unwrap()
+    }
+
+    #[test]
+    fn proxy_list_get_proxies_for_geo_match() {
+        let list: ProxyList = proxy_list_from_yaml(
+            r#"
+US:
+  proxies:
+    - "proxy1.us:3128"
+    - "proxy2.us:3128"
+GB:
+  proxies:
+    - "proxy1.gb:3128"
+"#,
+        );
+        let proxies = list.get_proxies_for_geo(Some("US"));
+        assert_eq!(proxies.len(), 2);
+        assert!(proxies.contains(&"proxy1.us:3128".to_string()));
+    }
+
+    #[test]
+    fn proxy_list_get_proxies_for_geo_case_insensitive() {
+        let list: ProxyList = proxy_list_from_yaml(
+            r#"
+US:
+  proxies:
+    - "proxy.us:3128"
+"#,
+        );
+        let proxies = list.get_proxies_for_geo(Some("us"));
+        assert_eq!(proxies.len(), 1);
+    }
+
+    #[test]
+    fn proxy_list_get_proxies_for_geo_unknown_returns_empty() {
+        let list: ProxyList = proxy_list_from_yaml(
+            r#"
+US:
+  proxies:
+    - "proxy.us:3128"
+"#,
+        );
+        let proxies = list.get_proxies_for_geo(Some("DE"));
+        assert!(proxies.is_empty());
+    }
+
+    #[test]
+    fn proxy_list_get_proxies_for_geo_none_key_looks_up_empty_string() {
+        let list: ProxyList = proxy_list_from_yaml(
+            r#"
+US:
+  proxies:
+    - "proxy.us:3128"
+"#,
+        );
+        // None maps to "" which won't match "US"
+        let proxies = list.get_proxies_for_geo(None);
+        assert!(proxies.is_empty());
+    }
+
+    #[test]
+    fn proxy_list_get_all_collects_across_geos() {
+        let list: ProxyList = proxy_list_from_yaml(
+            r#"
+US:
+  proxies:
+    - "proxy.us:3128"
+GB:
+  proxies:
+    - "proxy.gb:3128"
+    - "proxy2.gb:3128"
+"#,
+        );
+        let all = list.get_all();
+        assert_eq!(all.len(), 3);
+        assert!(all.contains(&"proxy.us:3128"));
+        assert!(all.contains(&"proxy.gb:3128"));
+        assert!(all.contains(&"proxy2.gb:3128"));
+    }
+
+    #[test]
+    fn proxy_list_get_all_empty() {
+        let list: ProxyList = proxy_list_from_yaml(
+            r#"
+US:
+  proxies: []
+"#,
+        );
+        assert!(list.get_all().is_empty());
+    }
+
+    #[test]
+    fn proxy_list_load_missing_file_returns_none() {
+        let result = ProxyList::load("/nonexistent/path/proxies.yaml");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn proxy_list_load_invalid_yaml_returns_none() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        f.write_all(b"not: valid: yaml: ][").unwrap();
+        let result = ProxyList::load(f.path().to_str().unwrap());
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn proxy_list_load_valid_file() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        f.write_all(b"US:\n  proxies:\n    - proxy.us:3128\n").unwrap();
+        let list = ProxyList::load(f.path().to_str().unwrap()).unwrap();
+        assert_eq!(list.get_proxies_for_geo(Some("US")).len(), 1);
+    }
+
+    // ---- ResolutionConfig default ----
+
+    #[test]
+    fn resolution_config_default_quality() {
+        let r = ResolutionConfig::default();
+        assert!((r.quality - 0.85).abs() < f32::EPSILON);
+    }
+}

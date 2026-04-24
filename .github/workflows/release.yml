@@ -196,3 +196,49 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: false
+
+  release_server_windows:
+    name: Release rusty-server (Windows)
+    runs-on: windows-latest
+    if: contains(inputs.packages, 'rusty-server')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' rusty-server/Cargo.toml | head -1 | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-server-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        run: cargo build --release -p rusty-server
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          files: target/release/rusty.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: false

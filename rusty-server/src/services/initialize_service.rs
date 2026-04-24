@@ -1,3 +1,4 @@
+use std::io::{Cursor, Write};
 use std::sync::Arc;
 
 use rcgen::generate_simple_self_signed;
@@ -158,7 +159,6 @@ fn build_function_yaml(
 }
 
 fn create_zip(binary_name: &str, binary_data: &[u8], extra_files: &[&str]) -> Result<Vec<u8>, AppError> {
-    use std::io::{Cursor, Write};
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
 
     let exe_opts = zip::write::SimpleFileOptions::default()

@@ -16,3 +16,19 @@ reqwest = { version = "0.13.2", features = ["json", "multipart"] }
 redis = { version = "1.1.0", features = ["tokio-comp", "connection-manager"] }
 base64 = "0.22.1"
 image = "0.25.10"
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "ui_map"
+harness = false
+
+[[bench]]
+name = "ai"
+harness = false
+
+[[bench]]
+name = "config"
+harness = false

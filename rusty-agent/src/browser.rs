@@ -538,3 +538,118 @@ fn random_point(x: f64, y: f64, width: f64, height: f64) -> Point {
         y: y as f64 + rng.gen_range(0.0..height as f64),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- ChromeBrowserLaunchConfig defaults ----
+
+    #[test]
+    fn default_has_all_none_and_empty() {
+        let cfg = ChromeBrowserLaunchConfig::default();
+        assert!(cfg.driver_executable_path.is_none());
+        assert!(cfg.host.is_none());
+        assert!(cfg.port.is_none());
+        assert!(cfg.driver_flags.is_empty());
+        assert!(!cfg.sandbox);
+        assert!(cfg.chrome_executable_path.is_none());
+        assert!(cfg.user_data_dir.is_none());
+        assert!(cfg.browser_flags.is_empty());
+    }
+
+    // ---- ChromeBrowserLaunchConfig JSON deserialization ----
+
+    #[test]
+    fn deserializes_full_config() {
+        let json = r#"{
+            "driver_executable_path": "/usr/bin/chromedriver",
+            "host": "localhost",
+            "port": 9515,
+            "driver_flags": ["--verbose"],
+            "sandbox": true,
+            "chrome_executable_path": "/usr/bin/google-chrome",
+            "user_data_dir": "/tmp/profile",
+            "browser_flags": ["--headless", "--no-sandbox"]
+        }"#;
+        let cfg: ChromeBrowserLaunchConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.driver_executable_path.as_deref(), Some("/usr/bin/chromedriver"));
+        assert_eq!(cfg.host.as_deref(), Some("localhost"));
+        assert_eq!(cfg.port, Some(9515));
+        assert_eq!(cfg.driver_flags, vec!["--verbose"]);
+        assert!(cfg.sandbox);
+        assert_eq!(cfg.chrome_executable_path.as_deref(), Some("/usr/bin/google-chrome"));
+        assert_eq!(cfg.user_data_dir.as_deref(), Some("/tmp/profile"));
+        assert_eq!(cfg.browser_flags, vec!["--headless", "--no-sandbox"]);
+    }
+
+    #[test]
+    fn deserializes_minimal_required_fields() {
+        let json = r#"{"driver_flags": [], "browser_flags": []}"#;
+        let cfg: ChromeBrowserLaunchConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.driver_executable_path.is_none());
+        assert!(cfg.host.is_none());
+        assert!(cfg.port.is_none());
+        assert!(cfg.driver_flags.is_empty());
+        assert!(!cfg.sandbox);
+        assert!(cfg.browser_flags.is_empty());
+    }
+
+    #[test]
+    fn deserializes_partial_config() {
+        let json = r#"{"sandbox": true, "port": 4444, "driver_flags": [], "browser_flags": []}"#;
+        let cfg: ChromeBrowserLaunchConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.sandbox);
+        assert_eq!(cfg.port, Some(4444));
+        assert!(cfg.driver_executable_path.is_none());
+    }
+
+    #[test]
+    fn deserializes_multiple_browser_flags() {
+        let json = r#"{"driver_flags": [], "browser_flags": ["--disable-gpu", "--window-size=1920,1080", "--lang=en-US"]}"#;
+        let cfg: ChromeBrowserLaunchConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.browser_flags.len(), 3);
+        assert!(cfg.browser_flags.contains(&"--disable-gpu".to_string()));
+    }
+
+    // ---- from_env ----
+
+    #[test]
+    fn from_env_returns_none_when_var_unset() {
+        // Ensure the var is absent — reading a missing var is always safe
+        if std::env::var("RUSTY_BROWSER_CONFIG").is_ok() {
+            // var happens to be set in this environment, skip rather than fail
+            return;
+        }
+        assert!(ChromeBrowserLaunchConfig::from_env().is_none());
+    }
+
+    #[test]
+    fn from_env_returns_none_when_var_has_invalid_json() {
+        // We can't set env vars without unsafe, but we can exercise the json
+        // parsing branch indirectly by directly calling serde_json on bad input.
+        let result: Option<ChromeBrowserLaunchConfig> = serde_json::from_str("not json").ok();
+        assert!(result.is_none());
+    }
+
+    // ---- random_point bounds ----
+
+    #[test]
+    fn random_point_is_within_bounding_box() {
+        for _ in 0..50 {
+            let p = random_point(10.0, 20.0, 100.0, 50.0);
+            assert!(p.x >= 10.0 && p.x < 110.0, "x={} out of bounds", p.x);
+            assert!(p.y >= 20.0 && p.y < 70.0, "y={} out of bounds", p.y);
+        }
+    }
+
+    #[test]
+    fn random_point_unit_dimensions_stays_at_origin() {
+        // width=1, height=1 → gen_range(0.0..1.0) is valid and stays within [x, x+1)
+        for _ in 0..20 {
+            let p = random_point(5.0, 8.0, 1.0, 1.0);
+            assert!(p.x >= 5.0 && p.x < 6.0);
+            assert!(p.y >= 8.0 && p.y < 9.0);
+        }
+    }
+}

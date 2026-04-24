@@ -113,7 +113,7 @@ pub(crate) struct ToolDef {
     pub parameters: Value,
 }
 
-pub fn browser_tools() -> Vec<Tool> {
+pub(crate) fn browser_tools() -> Vec<Tool> {
     vec![
         Tool {
             r#type: "function",
@@ -464,5 +464,272 @@ pub fn create_provider(config: &AIConfig) -> Box<dyn AIProvider> {
     match config.provider {
         AIProviderKind::OpenAI => Box::new(openai::OpenAIProvider::new(config)),
         AIProviderKind::OpenRouter => Box::new(openrouter::OpenRouterProvider::new(config)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AIProviderKind, ResolutionConfig};
+
+    fn make_call(name: &str, args: &str) -> ToolCall {
+        ToolCall {
+            id: "call-1".to_string(),
+            r#type: "function".to_string(),
+            function: ToolCallFunction {
+                name: name.to_string(),
+                arguments: args.to_string(),
+            },
+        }
+    }
+
+    fn ai_config(provider: AIProviderKind) -> AIConfig {
+        AIConfig {
+            provider,
+            api_key: "test-key".to_string(),
+            model: "gpt-4o".to_string(),
+            base_url: None,
+            resolution: ResolutionConfig::default(),
+        }
+    }
+
+    // ---- Message constructors ----
+
+    #[test]
+    fn message_system_role_and_content() {
+        let m = Message::system("You are helpful.");
+        assert_eq!(m.role, "system");
+        assert_eq!(m.content.as_ref().unwrap().as_str().unwrap(), "You are helpful.");
+        assert!(m.tool_calls.is_none());
+        assert!(m.tool_call_id.is_none());
+    }
+
+    #[test]
+    fn message_user_role_and_content() {
+        let m = Message::user("Hello");
+        assert_eq!(m.role, "user");
+        assert_eq!(m.content.as_ref().unwrap().as_str().unwrap(), "Hello");
+        assert!(m.tool_calls.is_none());
+        assert!(m.tool_call_id.is_none());
+    }
+
+    #[test]
+    fn message_user_with_screenshot_structure() {
+        let m = Message::user_with_screenshot("click the button", "base64data==");
+        assert_eq!(m.role, "user");
+        let content = m.content.unwrap();
+        let arr = content.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["type"].as_str().unwrap(), "text");
+        assert!(arr[0]["text"].as_str().unwrap().contains("click the button"));
+        assert_eq!(arr[1]["type"].as_str().unwrap(), "image_url");
+        let url = arr[1]["image_url"]["url"].as_str().unwrap();
+        assert!(url.starts_with("data:image/jpeg;base64,"));
+        assert!(url.contains("base64data=="));
+    }
+
+    #[test]
+    fn message_screenshot_update_structure() {
+        let m = Message::screenshot_update("abc123");
+        assert_eq!(m.role, "user");
+        let content = m.content.unwrap();
+        let arr = content.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["type"].as_str().unwrap(), "text");
+        assert_eq!(arr[1]["type"].as_str().unwrap(), "image_url");
+        let url = arr[1]["image_url"]["url"].as_str().unwrap();
+        assert!(url.contains("abc123"));
+    }
+
+    #[test]
+    fn message_assistant_tool_calls() {
+        let calls = vec![make_call("navigate", r#"{"url":"https://example.com"}"#)];
+        let m = Message::assistant_tool_calls(calls.clone());
+        assert_eq!(m.role, "assistant");
+        assert!(m.content.is_none());
+        let stored = m.tool_calls.unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].function.name, "navigate");
+    }
+
+    #[test]
+    fn message_tool_result_fields() {
+        let m = Message::tool_result("call-xyz", "success");
+        assert_eq!(m.role, "tool");
+        assert_eq!(m.content.as_ref().unwrap().as_str().unwrap(), "success");
+        assert_eq!(m.tool_call_id.as_deref(), Some("call-xyz"));
+        assert!(m.tool_calls.is_none());
+    }
+
+    // ---- parse_action ----
+
+    #[test]
+    fn parse_action_navigate() {
+        let call = make_call("navigate", r#"{"url":"https://example.com"}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::Navigate { url } if url == "https://example.com"));
+    }
+
+    #[test]
+    fn parse_action_click_injects_human_true() {
+        let call = make_call("click", r#"{"x":100.0,"y":200.0}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::Click { x, y, human: true } if x == 100.0 && y == 200.0));
+    }
+
+    #[test]
+    fn parse_action_scroll_by_injects_human_true() {
+        let call = make_call("scroll_by", r#"{"y":300}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::ScrollBy { y: 300, human: true }));
+    }
+
+    #[test]
+    fn parse_action_scroll_to_injects_human_true() {
+        let call = make_call("scroll_to", r#"{"node_id":42}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::ScrollTo { node_id: 42, human: true }));
+    }
+
+    #[test]
+    fn parse_action_node_click_injects_human_true() {
+        let call = make_call("node_click", r#"{"node_id":7}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::NodeClick { node_id: 7, human: true }));
+    }
+
+    #[test]
+    fn parse_action_mouse_move_becomes_human_mouse_move() {
+        let call = make_call("mouse_move", r#"{"x":50.0,"y":75.0}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::HumanMouseMove { x, y } if x == 50.0 && y == 75.0));
+    }
+
+    #[test]
+    fn parse_action_type_text() {
+        let call = make_call("type", r#"{"text":"hello world"}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::Type { text, node_id: None } if text == "hello world"));
+    }
+
+    #[test]
+    fn parse_action_screenshot() {
+        let call = make_call("screenshot", r#"{}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::Screenshot));
+    }
+
+    #[test]
+    fn parse_action_done() {
+        let call = make_call("done", r#"{"result":"task completed"}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::Done { result } if result == "task completed"));
+    }
+
+    #[test]
+    fn parse_action_wait() {
+        let call = make_call("wait", r#"{"ms":500}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::Wait { ms: 500 }));
+    }
+
+    #[test]
+    fn parse_action_hold_key() {
+        let call = make_call("hold_key", r#"{"key":"Backspace3000"}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::HoldKey { key } if key == "Backspace3000"));
+    }
+
+    #[test]
+    fn parse_action_fetch_html_no_node_id() {
+        let call = make_call("fetch_html", r#"{}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::FetchHtml { node_id: None }));
+    }
+
+    #[test]
+    fn parse_action_fetch_text() {
+        let call = make_call("fetch_text", r#"{"node_id":99}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::FetchText { node_id: 99 }));
+    }
+
+    #[test]
+    fn parse_action_engage_input() {
+        let call = make_call("engage_input", r#"{"node_id":5,"value":"hello"}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::EngageInput { node_id: 5, value } if value == "hello"));
+    }
+
+    #[test]
+    fn parse_action_get_ui_map_diff() {
+        let call = make_call("get_ui_map_diff", r#"{}"#);
+        let action = parse_action(&call).unwrap();
+        assert!(matches!(action, BrowserAction::GetUiMapDiff));
+    }
+
+    #[test]
+    fn parse_action_invalid_json_returns_error() {
+        let call = make_call("navigate", "not json at all");
+        let err = parse_action(&call).unwrap_err();
+        assert!(matches!(err, crate::error::AIError::InvalidResponse(_)));
+    }
+
+    #[test]
+    fn parse_action_unknown_tool_returns_error() {
+        let call = make_call("teleport", r#"{"destination":"mars"}"#);
+        let err = parse_action(&call).unwrap_err();
+        assert!(matches!(err, crate::error::AIError::InvalidResponse(_)));
+    }
+
+    // ---- browser_tools ----
+
+    #[test]
+    fn browser_tools_is_non_empty() {
+        let tools = browser_tools();
+        assert!(!tools.is_empty());
+    }
+
+    #[test]
+    fn browser_tools_all_are_function_type() {
+        for t in browser_tools() {
+            assert_eq!(t.r#type, "function");
+        }
+    }
+
+    #[test]
+    fn browser_tools_contains_expected_names() {
+        let tools = browser_tools();
+        let names: Vec<&str> = tools.iter().map(|t| t.function.name).collect();
+        for expected in ["navigate", "click", "type", "screenshot", "done", "engage_input"] {
+            assert!(names.contains(&expected), "missing tool: {expected}");
+        }
+    }
+
+    #[test]
+    fn browser_tools_no_duplicate_names() {
+        let tools = browser_tools();
+        let mut names: Vec<&str> = tools.iter().map(|t| t.function.name).collect();
+        let original_len = names.len();
+        names.dedup();
+        // after sort+dedup
+        let mut sorted = tools.iter().map(|t| t.function.name).collect::<Vec<_>>();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), original_len, "duplicate tool names found");
+    }
+
+    // ---- create_provider ----
+
+    #[test]
+    fn create_provider_openai_does_not_panic() {
+        let config = ai_config(AIProviderKind::OpenAI);
+        let _provider = create_provider(&config);
+    }
+
+    #[test]
+    fn create_provider_openrouter_does_not_panic() {
+        let config = ai_config(AIProviderKind::OpenRouter);
+        let _provider = create_provider(&config);
     }
 }

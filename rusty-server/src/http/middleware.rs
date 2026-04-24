@@ -28,7 +28,7 @@ pub async fn api_key_auth(
         .map(|s| s.strip_prefix("Bearer ").unwrap_or(s));
 
     match api_key {
-        Some(key) if state.config.api_keys.contains(&key.to_string()) => {
+        Some(key) if state.config.api_keys.iter().any(|k| k == key) => {
             Ok(next.run(request).await)
         }
         _ => Err(AppError::Unauthorized),

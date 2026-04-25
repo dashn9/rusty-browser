@@ -1,0 +1,33 @@
+server:
+  http_port: 1011
+  grpc_port: 50050   
+  grpc_server_url: "http://localhost:50050"
+  insecure_grpc: false
+
+redis:
+  url: redis://localhost:6379
+  key_prefix: "rusty:"
+
+ai:
+  provider: "openrouter"
+  api_key: "your_openrouter_api_key"
+  model: "openai/gpt-5.4-nano"
+  resolution:
+    quality: 0.2
+
+flux:
+  base_url: "http://localhost:7227"
+  api_key: "your_flux_api_key"
+  function_name: "rusty-agent"
+  pending_timeout_secs: 30
+
+api_keys:
+  - "gen_a_random_key_and_put_here"
+
+agent_env:
+  RUST_LOG: "debug"
+
+browser:
+  chrome_config:
+    browser_flags:
+      - "--headless=new"

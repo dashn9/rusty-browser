@@ -1,0 +1,47 @@
+redis_addr: redis://localhost:6379
+agent_redis_url: redis://user:pass@host:port
+api_key: gen_a_random_key_and_put_here
+
+agent_port: 50052
+
+providers:
+  gcp:
+    project_id: wraithbytes
+    zone: us-east5-a
+    image: projects/debian-cloud/global/images/debian-13-trixie-v20260310
+
+    credentials_file: "D:\\wraithbytes-ef07e912b8d8.json"
+
+    ssh_user: ubuntu
+    agent_version: "0.1.0"
+
+    labels:
+      environment: production
+      team: platform
+
+    agent_setup_commands:
+      - sudo apt-get update && sudo apt-get install -y libnspr4 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcb1 libxkbcommon0 libatspi2.0-0 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 libgbm1 libcairo2 libpango-1.0-0 libasound2 unzip htop
+
+    autoscaling:
+      enabled: true
+      name: gcp-prod
+
+      min_nodes: 1
+      max_nodes: 3
+
+      node_types:
+        - instance_type: e2-medium
+          vcpus: 2
+          memory_gb: 4
+        - instance_type: e2-standard-2
+          vcpus: 2
+          memory_gb: 8
+
+      cpu_upper_threshold: 80
+      cpu_lower_threshold: 45
+      mem_upper_threshold: 80
+      mem_lower_threshold: 45
+
+      evaluation_window_sec: 60
+      poll_interval_sec: 10
+      cooldown_sec: 20

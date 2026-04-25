@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use rusty_common::ai::BrowserAction;
 use rusty_common::error::BrowserError;
-use rusty_common::state::BrowserInfo;
+use rusty_common::state::{BrowserInfo, BrowserState};
 use rusty_proto::browser_agent_client::BrowserAgentClient;
 use rusty_proto::browser_command::Action;
 use rusty_proto::*;

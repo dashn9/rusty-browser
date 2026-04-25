@@ -28,7 +28,7 @@ impl Master for MasterService {
             public_ip: req.public_ip.clone(),
             private_ip: req.private_ip.clone(),
             grpc_port: req.grpc_port as u16,
-            state: BrowserState::Idle,
+            state: BrowserState::PartialReserved,
             contexts: vec![],
         };
 

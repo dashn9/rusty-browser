@@ -7,7 +7,7 @@ on:
         description: 'Packages to release (comma-separated)'
         type: string
         required: true
-        default: 'rusty-agent,rusty-server'
+        default: 'rusty-agent,rusty-server,rusty-cli'
       force_agent:
         description: 'Force release for rusty-agent'
         type: boolean
@@ -15,6 +15,11 @@ on:
         default: false
       force_server:
         description: 'Force release for rusty-server'
+        type: boolean
+        required: false
+        default: false
+      force_cli:
+        description: 'Force release for rusty-cli'
         type: boolean
         required: false
         default: false
@@ -239,6 +244,105 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           files: target/release/rusty.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+
+  release_cli:
+    name: Release rusty-cli (Linux)
+    runs-on: ubuntu-22.04
+    if: contains(inputs.packages, 'rusty-cli')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Version
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' rusty-cli/Cargo.toml | head -1 | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check Existing Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists."
+            if [ "${{ inputs.force_cli }}" == "false" ]; then
+              echo "Force is false. Aborting."
+              exit 1
+            fi
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rusty-cli/target
+          key: ${{ runner.os }}-cargo-cli-${{ hashFiles('rusty-cli/Cargo.lock') }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+
+      - name: Build
+        run: cargo build --release --manifest-path rusty-cli/Cargo.toml
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          files: rusty-cli/target/release/rusty-cli
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+
+  release_cli_windows:
+    name: Release rusty-cli (Windows)
+    runs-on: windows-latest
+    if: contains(inputs.packages, 'rusty-cli')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' rusty-cli/Cargo.toml | head -1 | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rusty-cli/target
+          key: ${{ runner.os }}-cargo-cli-${{ hashFiles('rusty-cli/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --release --manifest-path rusty-cli/Cargo.toml
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          files: rusty-cli/target/release/rusty-cli.exe
           draft: false
           prerelease: false
           generate_release_notes: false

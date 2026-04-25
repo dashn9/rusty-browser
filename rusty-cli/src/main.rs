@@ -4,7 +4,6 @@ use clap::{Parser, Subcommand};
 mod client;
 mod commands;
 mod config;
-mod error;
 
 use config::CliConfig;
 
@@ -80,7 +79,7 @@ fn main() -> Result<()> {
         },
         Commands::Init => {
             let client = client::RustyClient::new(&url, &api_key);
-            let resp: serde_json::Value = client.post("/initialize/", &serde_json::json!({}))?;
+            let resp: serde_json::Value = client.post_with_timeout("/initialize/", &serde_json::json!({}), Some(std::time::Duration::from_secs(240)))?;
             println!("{}", serde_json::to_string_pretty(&resp)?);
         }
         Commands::Teardown => {

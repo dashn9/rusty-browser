@@ -33,6 +33,7 @@ impl FluxClient {
         let resp = self.client
             .post(format!("{}/initialize", self.url))
             .header("X-API-Key", &self.token)
+            .timeout(std::time::Duration::from_secs(240))
             .send()
             .await?;
         if !resp.status().is_success() {

@@ -29,11 +29,17 @@ impl RustyClient {
     }
 
     pub fn post<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
-        let resp = self.client.post(self.url(path))
+        self.post_with_timeout(path, body, None)
+    }
+
+    pub fn post_with_timeout<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value, timeout: Option<std::time::Duration>) -> Result<T> {
+        let mut req = self.client.post(self.url(path))
             .header("X-API-Key", &self.api_key)
-            .json(body)
-            .send()?;
-        self.parse(resp)
+            .json(body);
+        if let Some(t) = timeout {
+            req = req.timeout(t);
+        }
+        self.parse(req.send()?)
     }
 
     pub fn put<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {

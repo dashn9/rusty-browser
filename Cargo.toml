@@ -5,7 +5,5 @@ members = [
     "rusty-proto",
     "rusty-server",
     "rusty-agent",
+    "rusty-cli",
 ]
-# rusty-cli is a standalone crate; excluded from the workspace so its
-# reqwest `blocking` feature doesn't get unified into the server build.
-exclude = ["rusty-cli"]

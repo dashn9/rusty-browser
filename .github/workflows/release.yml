@@ -286,8 +286,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            rusty-cli/target
-          key: ${{ runner.os }}-cargo-cli-${{ hashFiles('rusty-cli/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-cli-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install dependencies
         run: |
@@ -295,13 +295,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
 
       - name: Build
-        run: cargo build --release --manifest-path rusty-cli/Cargo.toml
+        run: cargo build --release -p rusty-cli
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: rusty-cli/target/release/rusty-cli
+          files: target/release/rusty-cli
           draft: false
           prerelease: false
           generate_release_notes: false
@@ -332,17 +332,17 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            rusty-cli/target
-          key: ${{ runner.os }}-cargo-cli-${{ hashFiles('rusty-cli/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-cli-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build
-        run: cargo build --release --manifest-path rusty-cli/Cargo.toml
+        run: cargo build --release -p rusty-cli
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: rusty-cli/target/release/rusty-cli.exe
+          files: target/release/rusty-cli.exe
           draft: false
           prerelease: false
           generate_release_notes: false

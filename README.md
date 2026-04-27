@@ -9,6 +9,10 @@ Rusty is a serverless browser automation platform. You spawn browser agents on d
 
 ---
 
+[![Demo: Setup Rusty Browser on your pc in 6 minutes](https://img.youtube.com/vi/Y7O2Gfq2A-k.jpg)](https://youtu.be/Y7O2Gfq2A-k)
+
+---
+
 ## Why Rusty over browser-use, Stagehand, or Playwright?
 
 Most browser automation tools treat the browser as a local subprocess. That works for one browser. It doesn't work for fifty.

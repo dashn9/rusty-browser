@@ -9,7 +9,13 @@ Rusty is a serverless browser automation platform. You spawn browser agents on d
 
 ---
 
+## PC Demo
+
 [![Demo: Setup Rusty Browser on your pc in 6 minutes](https://img.youtube.com/vi/Y7O2Gfq2A-k/0.jpg)](https://youtu.be/Y7O2Gfq2A-k)
+
+## Postman APIs
+
+All API endpoints are available in the [Rusty Browser Postman workspace](https://www.postman.com/ishogbon/workspace/rusty-browser).
 
 ---
 
@@ -212,6 +218,12 @@ curl -X POST http://localhost:8080/initialize/
 ```
 
 Re-run after any agent code changes or when rotating certs.
+
+---
+
+## Postman
+
+All API endpoints are available in the [Rusty Browser Postman workspace](https://www.postman.com/ishogbon/workspace/rusty-browser).
 
 ---
 
